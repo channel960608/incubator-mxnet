@@ -1,4 +1,4 @@
-package org.apache.mxnet.util;
+package org.apache.mxnet.api.util;
 
 import com.sun.jna.Pointer;
 import java.util.concurrent.atomic.AtomicReference;

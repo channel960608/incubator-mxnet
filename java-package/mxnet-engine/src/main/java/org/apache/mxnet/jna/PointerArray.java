@@ -13,7 +13,7 @@ import com.sun.jna.Pointer;
  * @see Function
  */
 @SuppressWarnings("checkstyle:EqualsHashCode")
-final class PointerArray extends Memory {
+public final class PointerArray extends Memory {
 
     private static final ObjectPool<PointerArray> POOL = new ObjectPool<>(null, null);
 

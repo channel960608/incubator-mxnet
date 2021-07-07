@@ -49,6 +49,22 @@ public final class NativeString {
         return new NativeString(data);
     }
 
+    /**
+     * Acquires a pooled {@code NativeString} object if available, otherwise a new instance is
+     * created.
+     *
+     * @param data raw bytes
+     * @return a {@code NativeString} object
+     */
+    public static NativeString of(byte[] data) {
+        NativeString array = POOL.acquire();
+        if (array != null && array.pointer.size() > data.length) {
+            array.setData(data);
+            return array;
+        }
+        return new NativeString(data);
+    }
+
     /** Recycles this instance and return it back to the pool. */
     public void recycle() {
         POOL.recycle(this);

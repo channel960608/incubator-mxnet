@@ -11,15 +11,13 @@ repositories {
 }
 
 application {
-    mainClassName = System.getProperty("main", "org.apache.mxnet.IntegrationTest")
+    mainClassName = System.getProperty("main", "org.apache.mxnet.integration.IntegrationTest")
 }
 
 dependencies {
     api "commons-cli:commons-cli:${commons_cli_version}"
-    api "org.apache.logging.log4j:log4j-slf4j-impl:${log4j_slf4j_version}"
-
     api project(":mxnet-engine")
-    implementation 'org.testng:testng:7.1.0'
+    implementation("org.testng:testng:${testng_version}")
 //    testImplementation(":mxnet-engine")
     testImplementation("org.testng:testng:${testng_version}") {
         exclude group: "junit", module: "junit"
@@ -33,13 +31,13 @@ run {
     systemProperties.remove("user.dir")
     systemProperty("file.encoding", "UTF-8")
     jvmArgs "-Xverify:none"
+//    args("-p=org.apache.mxnet.integration.tests.", "-m=loadNdArrayTest")
+//    args("-p=org.apache.mxnet.integration.tests.", "-m=mxnetLibNdArrayLoadSaveFreeCallTest")
+    args("-p=org.apache.mxnet.integration.tests.", "-m=createNdArrayTest")
 }
 
 test {
 
     useTestNG()
-    filter {
-        includeTestsMatching "org.apache.mxnet.integration.tests.engine.*"
-    }
 
 }

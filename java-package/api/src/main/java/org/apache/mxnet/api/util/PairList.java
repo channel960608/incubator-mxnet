@@ -1,4 +1,4 @@
-package org.apache.mxnet.util;
+package org.apache.mxnet.api.util;
 
 import java.util.ArrayList;
 import java.util.Iterator;

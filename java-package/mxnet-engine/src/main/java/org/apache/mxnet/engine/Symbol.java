@@ -2,7 +2,7 @@ package org.apache.mxnet.engine;
 
 import com.sun.jna.Pointer;
 import org.apache.mxnet.jna.JnaUtils;
-import org.apache.mxnet.util.NativeResource;
+import org.apache.mxnet.api.util.NativeResource;
 
 // TODO
 public class Symbol extends NativeResource<Pointer> {

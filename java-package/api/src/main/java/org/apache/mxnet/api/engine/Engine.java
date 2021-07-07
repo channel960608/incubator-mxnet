@@ -14,6 +14,7 @@ import java.util.ServiceLoader;
 public abstract class Engine {
 
     private static final Logger logger = LoggerFactory.getLogger(Engine.class);
+//    private static final String DEFAULT_ENGINE = initEngine();
 
     private static EngineProvider ENGINE_PROVIDE = initEngineProvider();
 
