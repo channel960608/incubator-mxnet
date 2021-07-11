@@ -1,5 +1,6 @@
 package org.apache.mxnet.api.ndarray;
 
+import org.apache.mxnet.api.Device;
 import org.apache.mxnet.api.ndarray.types.DataType;
 import org.apache.mxnet.api.ndarray.types.Shape;
 
@@ -10,7 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
-/** A class contains encoding and decoding logic for NDArray. */
+/** A interface contains encoding and decoding logic for NDArray. */
 final class NDSerializer {
 
     static final int BUFFER_SIZE = 81920;
@@ -72,7 +73,7 @@ final class NDSerializer {
     /**
      * Decodes {@link NDArray} through {@link DataInputStream}.
      *
-     * @param manager the {@link NDManager} assigned to the {@link NDArray}
+     * @param manager the {@link NDArrayFactory} assigned to the {@link NDArray}
      * @param is input stream data to load from
      * @return {@link NDArray}
      * @throws IOException data is not readable

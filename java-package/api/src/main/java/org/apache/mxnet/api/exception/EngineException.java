@@ -2,7 +2,7 @@ package org.apache.mxnet.api.exception;
 
 public class EngineException extends BaseException{
 
-    private static final long serialVersionUID = 1L;
+//    private static final long serialVersionUID = 1L;
 
     public EngineException(String message) {
         super(message);

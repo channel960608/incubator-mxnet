@@ -2,6 +2,7 @@ package org.apache.mxnet.api.engine;
 
 import org.apache.mxnet.api.Device;
 import org.apache.mxnet.api.ndarray.NDManager;
+import org.apache.mxnet.api.nn.SymbolBlock;
 import org.apache.mxnet.api.util.cuda.CudaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,4 +101,12 @@ public abstract class Engine {
      * @return a new top-level {@code NDManager}
      */
     public abstract NDManager newBaseManager(Device device);
+
+    /**
+     * Construct an empty SymbolBlock for loading.
+     *
+     * @param manager the manager to manage parameters
+     * @return Empty {@link SymbolBlock} for static graph
+     */
+    public abstract SymbolBlock newSymbolBlock(NDManager manager);
 }

@@ -105,6 +105,15 @@ public class PairList<K, V> implements Iterable<Pair<K, V>> {
     }
 
     /**
+     * Adds a key and value to the list.
+     *
+     * @param pair the Pair<key, value>
+     */
+    public void add(Pair<K, V> pair) {
+        add(pair.getKey(), pair.getValue());
+    }
+
+    /**
      * Appends all of the elements in the specified pair list to the end of this list.
      *
      * @param other the {@code PairList} containing elements to be added to this list

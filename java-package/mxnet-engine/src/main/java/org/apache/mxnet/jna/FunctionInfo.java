@@ -18,6 +18,10 @@ public class FunctionInfo {
 
     private static final Logger logger = LoggerFactory.getLogger(FunctionInfo.class);
 
+    public String getName() {
+        return this.name;
+    }
+
     FunctionInfo(Pointer pointer, String functionName, PairList<String, String> arguments) {
         this.handle = pointer;
         this.name = functionName;

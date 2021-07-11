@@ -10,8 +10,10 @@ import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,9 +24,13 @@ import org.apache.mxnet.api.ndarray.NDArray;
 import org.apache.mxnet.api.ndarray.types.DataType;
 import org.apache.mxnet.api.ndarray.types.Shape;
 import org.apache.mxnet.api.ndarray.types.SparseFormat;
+import org.apache.mxnet.api.nn.Parameter;
 import org.apache.mxnet.api.util.PairList;
+import org.apache.mxnet.engine.CachedOp;
 import org.apache.mxnet.engine.MxDeviceType;
 import org.apache.mxnet.engine.MxNDArray;
+import org.apache.mxnet.engine.MxSymbolBlock;
+import org.apache.mxnet.engine.Symbol;
 
 public final class JnaUtils {
     public static final MxnetLibrary LIB = LibUtils.loadLibrary();
@@ -34,10 +40,367 @@ public final class JnaUtils {
     private static final String[] OP_NAME_PREFIX = {
             "_contrib_", "_linalg_", "_sparse_", "_image_", "_random_"
     };
-    private static final Map<String, FunctionInfo> OPS = getNdArrayFunctions();
+
+//    private static final Map<String, FunctionInfo> OPS = getNdArrayFunctions();
+    private static final Map<String, FunctionInfo> OPS = null;
 
     public static final String[] EMPTY_ARRAY = new String[0];
     // TODO
+    /** An enum that enumerates the statuses of numpy mode. */
+
+    public enum NumpyMode {
+        OFF,
+        THREAD_LOCAL_ON,
+        GLOBAL_ON
+    }
+
+    public static void setNumpyMode(NumpyMode mode) {
+        IntBuffer ret = IntBuffer.allocate(1);
+        checkCall(LIB.MXSetIsNumpyShape(mode.ordinal(), ret));
+    }
+
+    /*******************************************************************************
+     * About CacheOp
+     ******************************************************************************/
+    public static CachedOp createCachedOp(
+            MxSymbolBlock block, boolean training) {
+        Symbol symbol = block.getSymbol();
+
+        List<Parameter> parameters = block.getAllParameters();
+
+        // record data index in all inputs
+        PairList<String, Integer> dataIndices = new PairList<>();
+        // record parameter index in all inputs
+        List<Integer> paramIndices = new ArrayList<>();
+        int index = 0;
+        for (Parameter parameter : parameters) {
+            // We assume uninitialized parameters are data inputs
+            if (parameter.isInitialized()) {
+                paramIndices.add(index);
+            } else {
+                dataIndices.add(parameter.getName(), index);
+            }
+            ++index;
+        }
+
+        // Creating CachedOp
+        Pointer symbolHandle = symbol.getHandle();
+        PointerByReference ref = REFS.acquire();
+
+        // static_alloc and static_shape are enabled by default
+        String[] keys = {"data_indices", "param_indices", "static_alloc", "static_shape"};
+        String[] values = {dataIndices.values().toString(), paramIndices.toString(), "1", "1"};
+
+        checkCall(LIB.MXCreateCachedOp(symbolHandle, keys.length, keys, values, ref, (byte) 0));
+        Pointer pointer = ref.getValue();
+        REFS.recycle(ref);
+
+        return new CachedOp(pointer, parameters, paramIndices, dataIndices);
+    }
+
+    public static void freeCachedOp(Pointer handle) {
+        checkCall(LIB.MXFreeCachedOp(handle));
+    }
+
+    /*******************************************************************************
+     * About Symbol
+     ******************************************************************************/
+    public static Pointer createSymbolFromFile(String path) {
+        PointerByReference ref = REFS.acquire();
+        checkCall(LIB.MXSymbolCreateFromFile(path, ref));
+        Pointer pointer = ref.getValue();
+        REFS.recycle(ref);
+        return pointer;
+    }
+
+    public static Pointer createSymbolFromString(String json) {
+        PointerByReference ref = REFS.acquire();
+        checkCall(LIB.MXSymbolCreateFromJSON(json, ref));
+        Pointer pointer = ref.getValue();
+        REFS.recycle(ref);
+        return pointer;
+    }
+
+    public static String[] listSymbolOutputs(Pointer symbol) {
+        IntBuffer size = IntBuffer.allocate(1);
+        PointerByReference ref = REFS.acquire();
+
+        checkCall(LIB.MXSymbolListOutputs(symbol, size, ref));
+        String[] ret = toStringArray(ref, size.get());
+        REFS.recycle(ref);
+        return ret;
+    }
+
+    public static String printSymbol(Pointer symbol) {
+        String[] outStr = new String[1];
+        checkCall(LIB.NNSymbolPrint(symbol, outStr));
+        return outStr[0];
+    }
+
+    public static void freeSymbol(Pointer symbol) {
+        checkCall(LIB.NNSymbolFree(symbol));
+    }
+
+    public static String[] listSymbolArguments(Pointer symbol) {
+        IntBuffer size = IntBuffer.allocate(1);
+        PointerByReference ref = REFS.acquire();
+
+        checkCall(LIB.MXSymbolListArguments(symbol, size, ref));
+
+        String[] ret = toStringArray(ref, size.get());
+        REFS.recycle(ref);
+        return ret;
+    }
+
+    public static String[] listSymbolAuxiliaryStates(Pointer symbol) {
+        IntBuffer size = IntBuffer.allocate(1);
+        PointerByReference ref = REFS.acquire();
+
+        checkCall(LIB.MXSymbolListAuxiliaryStates(symbol, size, ref));
+
+        String[] ret = toStringArray(ref, size.get());
+        REFS.recycle(ref);
+        return ret;
+    }
+
+    public static String[] listSymbolNames(Pointer symbol) {
+        IntBuffer size = IntBuffer.allocate(1);
+        PointerByReference ref = REFS.acquire();
+
+        checkCall(LIB.NNSymbolListInputNames(symbol, 0, size, ref));
+
+        String[] ret = toStringArray(ref, size.get());
+        REFS.recycle(ref);
+        return ret;
+    }
+
+    public static Pointer getSymbolInternals(Pointer symbol) {
+        PointerByReference ref = REFS.acquire();
+        checkCall(LIB.MXSymbolGetInternals(symbol, ref));
+        Pointer pointer = ref.getValue();
+        REFS.recycle(ref);
+        return pointer;
+    }
+
+    private static List<Shape> recoverShape(
+            NativeSizeByReference size, PointerByReference nDim, PointerByReference data) {
+        int shapeLength = (int) size.getValue().longValue();
+        if (shapeLength == 0) {
+            return new ArrayList<>();
+        }
+        int[] dims = nDim.getValue().getIntArray(0, shapeLength);
+        int flattenedLength = 0;
+        for (int dim : dims) {
+            flattenedLength += dim;
+        }
+        long[] flattenedShapes = data.getValue().getPointer(0).getLongArray(0, flattenedLength);
+        int idx = 0;
+        List<Shape> result = new ArrayList<>();
+        for (int dim : dims) {
+            long[] shape = new long[dim];
+            System.arraycopy(flattenedShapes, idx, shape, 0, dim);
+            idx += dim;
+            result.add(new Shape(shape));
+        }
+        return result;
+    }
+
+    public static List<List<Shape>> inferShape(Symbol symbol, PairList<String, Shape> args) {
+        Pointer handler = symbol.getHandle();
+        int numArgs = args.size();
+        String[] keys = args.keys().toArray(new String[0]);
+        // the following two is also the representation of
+        // CSR NDArray
+        long[] indPtr = new long[numArgs + 1];
+        Shape flattened = new Shape();
+        indPtr[0] = 0;
+        for (int i = 0; i < args.size(); i++) {
+            Shape shape = args.valueAt(i);
+            indPtr[i + 1] = shape.dimension();
+            flattened = flattened.addAll(shape);
+        }
+        long[] flattenedShapeArray = flattened.getShape();
+
+        NativeSizeByReference inShapeSize = new NativeSizeByReference();
+        PointerByReference inShapeNDim = REFS.acquire();
+        PointerByReference inShapeData = REFS.acquire();
+        NativeSizeByReference outShapeSize = new NativeSizeByReference();
+        PointerByReference outShapeNDim = REFS.acquire();
+        PointerByReference outShapeData = REFS.acquire();
+        NativeSizeByReference auxShapeSize = new NativeSizeByReference();
+        PointerByReference auxShapeNDim = REFS.acquire();
+        PointerByReference auxShapeData = REFS.acquire();
+        IntBuffer complete = IntBuffer.allocate(1);
+        checkCall(
+                LIB.MXSymbolInferShape64(
+                        handler,
+                        numArgs,
+                        keys,
+                        indPtr,
+                        flattenedShapeArray,
+                        inShapeSize,
+                        inShapeNDim,
+                        inShapeData,
+                        outShapeSize,
+                        outShapeNDim,
+                        outShapeData,
+                        auxShapeSize,
+                        auxShapeNDim,
+                        auxShapeData,
+                        complete));
+        if (complete.get() != 0) {
+            return Arrays.asList(
+                    recoverShape(inShapeSize, inShapeNDim, inShapeData),
+                    recoverShape(outShapeSize, outShapeNDim, outShapeData),
+                    recoverShape(auxShapeSize, auxShapeNDim, auxShapeData));
+        }
+        return null;
+    }
+
+    public static Pointer optimizeFor(Symbol current, String backend, Device device) {
+        // TODO: Support partition on parameters
+        PointerByReference returnedSymbolHandle = REFS.acquire();
+        // placeHolders
+        PointerByReference[] placeHolders = {
+                REFS.acquire(),
+                REFS.acquire(),
+                REFS.acquire(),
+                REFS.acquire(),
+                REFS.acquire(),
+                REFS.acquire()
+        };
+        // there is no need to update parameters
+        // TODO : check 22th parameter type
+        checkCall(
+                LIB.MXOptimizeForBackend(
+                        current.getHandle(),
+                        backend,
+                        MxDeviceType.toDeviceType(device),
+                        returnedSymbolHandle,
+                        0,
+                        placeHolders[0],
+                        0,
+                        placeHolders[1],
+                        0,
+                        new String[0],
+                        new String[0],
+                        0,
+                        new String[0],
+                        new long[0],
+                        new int[0],
+                        0,
+                        new String[0],
+                        new int[0],
+                        0,
+                        new String[0],
+                        new int[0],
+                        (byte) 0,
+                        IntBuffer.allocate(0),
+                        placeHolders[2],
+                        placeHolders[3],
+                        IntBuffer.allocate(0),
+                        placeHolders[4],
+                        placeHolders[5]
+                        ));
+        Pointer ptr = returnedSymbolHandle.getValue();
+        REFS.recycle(returnedSymbolHandle);
+        Arrays.stream(placeHolders).forEach(REFS::recycle);
+        return ptr;
+    }
+
+    /*******************************************************************************
+     * About NdArray
+     ******************************************************************************/
+    public static void loadNdArrayFromFile(Path path) {
+        loadNdArrayFromFile(path.toAbsolutePath());
+    }
+
+    public static PairList<String, Pointer> loadNdArrayFromFile(String path) {
+        IntBuffer handleSize = IntBuffer.allocate(1);
+        IntBuffer namesSize = IntBuffer.allocate(1);
+        PointerByReference handlesRef = REFS.acquire();
+        PointerByReference namesRef = REFS.acquire();
+        checkCall(LIB.MXNDArrayLoad(path, handleSize, handlesRef, namesSize, namesRef));
+        // TODO : construct NDArray Objects
+        int handleCount =handleSize.get();
+        int nameCount = namesSize.get();
+        if (nameCount > 0 && nameCount != handleCount) {
+            throw new IllegalStateException(
+                    "Mismatch between names and arrays in checkpoint file: " + path);
+        }
+        Pointer[] handles = handlesRef.getValue().getPointerArray(0, handleCount);
+
+        PairList<String, Pointer> pairList = new PairList<>();
+
+        if (nameCount == 0) {
+            for (Pointer handle : handles) {
+                pairList.add(null, handle);
+            }
+        } else {
+            String[] names = namesRef.getValue().getStringArray(0, nameCount);
+            for (int i = 0; i < handleCount; i++) {
+                pairList.add(names[i], handles[i]);
+            }
+        }
+        REFS.recycle(namesRef);
+        REFS.recycle(handlesRef);
+
+        return pairList;
+    }
+
+    public static void freeNdArray(Pointer handle) {
+        checkCall(LIB.MXNDArrayFree(handle));
+
+    }
+
+    public static Pointer loadNdArrayFromByteArray(byte[] buf, int offset, int size) {
+        Memory memory = new Memory(size);
+        memory.write(0, buf, offset, size);
+        PointerByReference outRef = REFS.acquire();
+        checkCall(LIB.MXNDArrayLoadFromRawBytes(memory, new NativeSize(size), outRef));
+        Pointer p = outRef.getValue();
+//        outRef.getValue().getPointerArray(0, size);
+
+        REFS.recycle(outRef);
+        return p;
+    }
+
+    public static Pointer loadNdArrayFromByteBuffer(ByteBuffer byteBuffer) {
+//        Pointer handle = new Pointer(byteBuffer.address);
+//        ((DirectByteBuffer) byteBuffer).address()
+        // TODO
+        byte[] bytes = new byte[byteBuffer.limit()];
+        byteBuffer.get(bytes);
+        return loadNdArrayFromByteArray(bytes, 0, byteBuffer.limit());
+    }
+
+    public static ByteBuffer saveNdArrayAsByteBuffer(Pointer ndArray) {
+        NativeSizeByReference size = new NativeSizeByReference();
+        PointerByReference ref = new PointerByReference();
+        checkCall(LIB.MXNDArraySaveRawBytes(ndArray, size, ref));
+        return ref.getValue().getByteBuffer(0, size.getValue().longValue());
+    }
+
+    public static byte[] saveNdArrayAsByteArray(Pointer ndArray) {
+        ByteBuffer buffer = saveNdArrayAsByteBuffer(ndArray);
+        byte[] bytes = new byte[buffer.limit()];
+        buffer.get(bytes);
+        return bytes;
+    }
+
+
+    public static void syncCopyToCPU(Pointer ndArray, Pointer data, int len) {
+        NativeSize size = new NativeSize(len);
+        checkNDArray(ndArray, "copy from");
+        checkNDArray(data, "copy to");
+        checkCall(LIB.MXNDArraySyncCopyToCPU(ndArray, data, size));
+    }
+
+    public static void syncCopyFromCPU(Pointer ndArray, Buffer data, int len) {
+        NativeSize size = new NativeSize(len);
+        Pointer pointer = Native.getDirectBufferPointer(data);
+        checkCall(LIB.MXNDArraySyncCopyFromCPU(ndArray, pointer, size));
+    }
 
     public static void waitToRead(Pointer ndArray) {
         checkNDArray(ndArray, "wait to read");
@@ -164,7 +527,7 @@ public final class JnaUtils {
         return OPS.get(opName);
     }
 
-    private static FunctionInfo getFunctionByName(
+    public static FunctionInfo getFunctionByName(
             String name, String functionName, Pointer handle) {
         String[] nameRef = {name};
         String[] description = new String[1];
@@ -223,7 +586,7 @@ public final class JnaUtils {
         return set;
     }
 
-    private static String getOpNamePrefix(String name) {
+    public static String getOpNamePrefix(String name) {
         for (String prefix : OP_NAME_PREFIX) {
             if (name.startsWith(prefix)) {
                 return name.substring(prefix.length());
@@ -310,20 +673,44 @@ public final class JnaUtils {
         return version.get();
     }
 
-    public static Pointer createSymbolFromFile(String path) {
+    public static MxNDArray[] cachedOpInvoke(
+            Pointer cachedOpHandle, MxNDArray[] inputs, Device device) {
+        IntBuffer buf = IntBuffer.allocate(1);
+        PointerArray array = toPointerArray(inputs);
         PointerByReference ref = REFS.acquire();
-        checkCall(LIB.MXSymbolCreateFromFile(path, ref));
-        Pointer pointer = ref.getValue();
+        PointerByReference outSTypeRef = REFS.acquire();
+        // TODO: check the init value of default_dev_type and default_dev_id
+        checkCall(
+                LIB.MXInvokeCachedOp(
+                        cachedOpHandle, inputs.length, array, MxDeviceType.toDeviceType(device), device.getDeviceId(), buf, ref, outSTypeRef));
+        int numOutputs = buf.get();
+        Pointer[] ptrArray = ref.getValue().getPointerArray(0, numOutputs);
+        int[] sTypes = outSTypeRef.getValue().getIntArray(0, numOutputs);
+        MxNDArray[] output = new MxNDArray[numOutputs];
+        for (int i = 0; i < numOutputs; i++) {
+            if (sTypes[i] != 0) {
+                output[i] = new MxNDArray(ptrArray[i], SparseFormat.fromValue(sTypes[i]));
+            } else {
+                output[i] = new MxNDArray(ptrArray[i]);
+            }
+        }
         REFS.recycle(ref);
-        return pointer;
+        REFS.recycle(outSTypeRef);
+        array.recycle();
+        return output;
     }
 
-    public static Pointer createSymbolFromString(String json) {
-        PointerByReference ref = REFS.acquire();
-        checkCall(LIB.MXSymbolCreateFromJSON(json, ref));
-        Pointer pointer = ref.getValue();
-        REFS.recycle(ref);
-        return pointer;
+    private static void checkNDArray(Pointer pointer, String msg) {
+        if (pointer == null) {
+            throw new IllegalArgumentException(
+                    "Tried to " + msg + " an MXNet NDArray that was already closed");
+        }
+    }
+
+    public static void checkCall(int ret) {
+        if (ret != 0) {
+            throw new EngineException("MXNet engine call failed: " + getLastError());
+        }
     }
 
     private static String getLastError() {
@@ -343,129 +730,5 @@ public final class JnaUtils {
         }
 
         return arr;
-    }
-
-    public static String[] listSymbolOutputs(Pointer symbol) {
-        IntBuffer size = IntBuffer.allocate(1);
-        PointerByReference ref = REFS.acquire();
-
-        checkCall(LIB.MXSymbolListOutputs(symbol, size, ref));
-        String[] ret = toStringArray(ref, size.get());
-        REFS.recycle(ref);
-        return ret;
-    }
-
-    public static String printSymbol(Pointer symbol) {
-        String[] outStr = new String[1];
-        checkCall(LIB.NNSymbolPrint(symbol, outStr));
-        return outStr[0];
-    }
-
-    public static void freeSymbol(Pointer symbol) {
-        checkCall(LIB.NNSymbolFree(symbol));
-    }
-
-    public static void loadNdArrayFromFile(Path path) {
-        loadNdArrayFromFile(path.toAbsolutePath());
-    }
-
-    public static PairList<String, Pointer> loadNdArrayFromFile(String path) {
-        IntBuffer handleSize = IntBuffer.allocate(1);
-        IntBuffer namesSize = IntBuffer.allocate(1);
-        PointerByReference handlesRef = REFS.acquire();
-        PointerByReference namesRef = REFS.acquire();
-        checkCall(LIB.MXNDArrayLoad(path, handleSize, handlesRef, namesSize, namesRef));
-        // TODO : construct NDArray Objects
-        int handleCount =handleSize.get();
-        int nameCount = namesSize.get();
-        if (nameCount > 0 && nameCount != handleCount) {
-            throw new IllegalStateException(
-                    "Mismatch between names and arrays in checkpoint file: " + path);
-        }
-        Pointer[] handles = handlesRef.getValue().getPointerArray(0, handleCount);
-
-        PairList<String, Pointer> pairList = new PairList<>();
-
-        if (nameCount == 0) {
-            for (Pointer handle : handles) {
-                pairList.add(null, handle);
-            }
-        } else {
-            String[] names = namesRef.getValue().getStringArray(0, nameCount);
-            for (int i = 0; i < handleCount; i++) {
-                pairList.add(names[i], handles[i]);
-            }
-        }
-        REFS.recycle(namesRef);
-        REFS.recycle(handlesRef);
-
-        return pairList;
-    }
-
-    public static void freeNdArray(Pointer handle) {
-        checkCall(LIB.MXNDArrayFree(handle));
-
-    }
-
-    public static Pointer loadNdArrayFromByteArray(byte[] buf, int offset, int size) {
-        Memory memory = new Memory(size);
-        memory.write(0, buf, offset, size);
-        PointerByReference outRef = REFS.acquire();
-        checkCall(LIB.MXNDArrayLoadFromRawBytes(memory, new NativeSize(size), outRef));
-        Pointer p = outRef.getValue();
-//        outRef.getValue().getPointerArray(0, size);
-
-        REFS.recycle(outRef);
-        return p;
-    }
-
-    public static Pointer loadNdArrayFromByteBuffer(ByteBuffer byteBuffer) {
-//        Pointer handle = new Pointer(byteBuffer.address);
-//        ((DirectByteBuffer) byteBuffer).address()
-        // TODO
-        byte[] bytes = new byte[byteBuffer.limit()];
-        byteBuffer.get(bytes);
-        return loadNdArrayFromByteArray(bytes, 0, byteBuffer.limit());
-    }
-
-    public static ByteBuffer saveNdArrayAsByteBuffer(Pointer ndArray) {
-        NativeSizeByReference size = new NativeSizeByReference();
-        PointerByReference ref = new PointerByReference();
-        checkCall(LIB.MXNDArraySaveRawBytes(ndArray, size, ref));
-        return ref.getValue().getByteBuffer(0, size.getValue().longValue());
-    }
-
-    public static byte[] saveNdArrayAsByteArray(Pointer ndArray) {
-        ByteBuffer buffer = saveNdArrayAsByteBuffer(ndArray);
-        byte[] bytes = new byte[buffer.limit()];
-        buffer.get(bytes);
-        return bytes;
-    }
-
-
-    public static void syncCopyToCPU(Pointer ndArray, Pointer data, int len) {
-        NativeSize size = new NativeSize(len);
-        checkNDArray(ndArray, "copy from");
-        checkNDArray(data, "copy to");
-        checkCall(LIB.MXNDArraySyncCopyToCPU(ndArray, data, size));
-    }
-
-    public static void syncCopyFromCPU(Pointer ndArray, Buffer data, int len) {
-        NativeSize size = new NativeSize(len);
-        Pointer pointer = Native.getDirectBufferPointer(data);
-        checkCall(LIB.MXNDArraySyncCopyFromCPU(ndArray, pointer, size));
-    }
-
-    private static void checkNDArray(Pointer pointer, String msg) {
-        if (pointer == null) {
-            throw new IllegalArgumentException(
-                    "Tried to " + msg + " an MXNet NDArray that was already closed");
-        }
-    }
-
-    public static void checkCall(int ret) {
-        if (ret != 0) {
-            throw new EngineException("MXNet engine call failed: " + getLastError());
-        }
     }
 }

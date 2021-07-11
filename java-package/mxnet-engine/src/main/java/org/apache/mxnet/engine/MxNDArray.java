@@ -2,6 +2,7 @@ package org.apache.mxnet.engine;
 
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
+import com.sun.jna.ptr.PointerByReference;
 import org.apache.mxnet.api.Device;
 import org.apache.mxnet.api.ndarray.LazyNDArray;
 import org.apache.mxnet.api.ndarray.NDArray;
@@ -12,17 +13,23 @@ import org.apache.mxnet.api.ndarray.types.DataType;
 import org.apache.mxnet.api.ndarray.types.Shape;
 import org.apache.mxnet.api.ndarray.types.SparseFormat;
 import org.apache.mxnet.api.util.NativeResource;
+import org.apache.mxnet.api.util.Pair;
 import org.apache.mxnet.api.util.PairList;
+import org.apache.mxnet.jna.FunctionInfo;
 import org.apache.mxnet.jna.JnaUtils;
 
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.DoubleBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.IntStream;
 
 public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
@@ -42,16 +49,19 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
     // and null which means the flag is not set by the native engine yet
     private Boolean hasGradient;
     private Integer version;
-//    private MxNDArrayEx mxNDArrayEx;
+    protected MxNDManager manager;
+    private MxNDArrayEx mxNDArrayEx;
 
     MxNDArray(
+            MxNDManager manager,
             Pointer handle,
             Device device,
             Shape shape,
             DataType dataType,
             boolean hasGradient) {
-        super(handle);
+        this(manager, handle);
         this.device = device;
+        // shape check
         if (Arrays.stream(shape.getShape()).anyMatch(s -> s < 0)) {
             throw new IllegalArgumentException("The shape must be >= 0");
         }
@@ -60,13 +70,15 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
         this.hasGradient = hasGradient;
     }
 
-    public MxNDArray(Pointer handle) {
+    public MxNDArray(MxNDManager manager, Pointer handle) {
         super(handle);
-//        mxNDArrayEx = new MxNDArrayEx(this);
+        this.manager = manager;
+        mxNDArrayEx = new MxNDArrayEx(this);
+        manager.attachInternal(getUid(), this);
     }
 
-    public MxNDArray(Pointer handle, SparseFormat fmt) {
-        this(handle);
+    public MxNDArray(MxNDManager manager, Pointer handle, SparseFormat fmt) {
+        this(manager, handle);
         this.sparseFormat = fmt;
     }
 
@@ -125,28 +137,12 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
         return this.version;
     }
 
-    public static MxNDArray create(Shape shape, DataType dataType, Device device) {
-        Pointer handle = JnaUtils.createNdArray(device, shape, dataType, shape.dimension(), false);
-        if (JnaUtils.getVersion() >= 10700) {
-            return new MxNDArray(handle, device, shape, dataType, false);
-        }
-        // TODO : support ndarry with version < 10700
-        return null;
-//        return new MxNDArray16(this, handle, device, shape, dataType, false);
-    }
 
-    public static MxNDArray create(Pointer handle) {
-        if (JnaUtils.getVersion() >= 10700) {
-            return new MxNDArray(handle);
-        }
-        // TODO : support ndarry with version < 10700
-        return null;
-    }
     private NDArray duplicate(
             Shape shape, DataType dataType, Device device, String name
     ) {
         // TODO get copy parameter
-        NDArray array = MxNDArray.create(shape, dataType, device);
+        NDArray array = getManager().create(shape, dataType, device);
         array.setName(name);
         copyTo(array);
         return array;
@@ -188,18 +184,11 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
     }
 
     private MxNDArray createGradient(SparseFormat format) {
-        try (MxNDArray zeros = (MxNDArray) zeros(getShape(), getDataType(), getDevice())) {
+        try (MxNDArray zeros = (MxNDArray) getManager().zeros(getShape(), getDataType(), getDevice())) {
             return (MxNDArray) zeros.toSparse(format);
         }
     }
 
-    // test required
-    public static NDArray zeros(Shape shape, DataType dataType, Device device) {
-
-        MxNDArray ndArray = MxNDArray.create(shape, dataType, device);
-        return ndArray.zeros(shape, dataType);
-
-    }
     public NDArray zeros(Shape shape, DataType dataType) {
         return fill("_npi_zeros", shape, dataType);
     }
@@ -245,7 +234,7 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
                             + "on your NDArray or block.setInitializer() on your Block");
         }
         Pointer pointer = JnaUtils.getGradient(getHandle());
-        return new MxNDArray(pointer);
+        return getManager().create(pointer);
     }
 
     /** {@inheritDoc} */
@@ -262,7 +251,7 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
     @Override
     public NDArray stopGradient() {
         Pointer pointer = JnaUtils.detachGradient(getHandle());
-        return MxNDArray.create(pointer);
+        return getManager().create(pointer);
     }
 
     /** {@inheritDoc} */
@@ -281,14 +270,10 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
         DataType dType = getDataType();
         long product = sh.size();
         long len = dType.getNumOfBytes() * product;
-        ByteBuffer bb = MxNDArray.allocateDirect(Math.toIntExact(len));
+        ByteBuffer bb = getManager().allocateDirect(Math.toIntExact(len));
         Pointer pointer = Native.getDirectBufferPointer(bb);
         JnaUtils.syncCopyToCPU(getHandle(), pointer, Math.toIntExact(product));
         return bb;
-    }
-
-    public static ByteBuffer allocateDirect(int capacity) {
-        return ByteBuffer.allocateDirect(capacity).order(ByteOrder.nativeOrder());
     }
 
     /** {@inheritDoc} */
@@ -310,7 +295,7 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
         validate(inputType);
 
         int numOfBytes = inputType.getNumOfBytes();
-        ByteBuffer buf = MxNDArray.allocateDirect(size * numOfBytes);
+        ByteBuffer buf = getManager().allocateDirect(size * numOfBytes);
 
         switch (inputType) {
             case FLOAT32:
@@ -1186,7 +1171,7 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
     public NDArray softmax(int axis) {
         // MXNet softmax op bug on GPU
         if (isEmpty()) {
-            return MxNDArray.create(getShape(), DataType.FLOAT32, getDevice());
+            return getManager().create(getShape(), DataType.FLOAT32, getDevice());
         }
         MxOpParams params = new MxOpParams();
         params.addParam("axis", axis);
@@ -1198,7 +1183,7 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
     public NDArray logSoftmax(int axis) {
         // MXNet logsoftmax op bug on GPU
         if (isEmpty()) {
-            return MxNDArray.create(getShape(), DataType.FLOAT32, getDevice());
+            return getManager().create(getShape(), DataType.FLOAT32, getDevice());
         }
         MxOpParams params = new MxOpParams();
         params.addParam("axis", axis);
@@ -1580,8 +1565,8 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
 
     /** {@inheritDoc} */
     @Override
-    public NDManager getManager() {
-        return null;
+    public MxNDManager getManager() {
+        return manager;
     }
 
     /** {@inheritDoc} */
@@ -1651,20 +1636,78 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
     }
 
     public static void main(String... args) {
+        test3();
+
+    }
+
+    public static void test1() {
         try {
+            JnaUtils.setNumpyMode(JnaUtils.NumpyMode.GLOBAL_ON);
             PairList<String, Pointer> pairList = JnaUtils.loadNdArrayFromFile("/Users/cspchen/Downloads/mxnet_resnet18/resnet18_v1-0000.params");
 
             Pointer handle = pairList.get(0).getValue();
+            for (Pair<String, Pointer> p : pairList) {
+                System.out.println(p.getKey());
+                System.out.println(p.getValue().toString());
+            }
 
-            MxNDArray nDArray = MxNDArray.create(handle);
-
-            nDArray.toString();
-            System.out.println("ok");
+            MxNDArray nDArray = NDManager.newBaseManager().create(handle);
+            nDArray.waitToRead();
         } catch (Exception e) {
             e.printStackTrace();
             int a = 1;
         }
-
     }
+
+    public static void test2() {
+        try {
+            Symbol symbol =
+                    Symbol.loadFromFile(
+                            "/Users/cspchen/Downloads/mxnet_resnet18/resnet18_v1-symbol.json");
+//            String strSymbol = JnaUtils.printSymbol(symbol.getHandle());
+//            String[] strs = JnaUtils.listSymbolOutputs(symbol.getHandle());
+        } catch (Exception e) {
+            e.printStackTrace();
+            int a = 1;
+        }
+    }
+
+    public static void test3() {
+        Set<String> opNames = JnaUtils.getAllOpNames();
+        Map<String, FunctionInfo> map = new ConcurrentHashMap<>();
+
+        PointerByReference ref = new PointerByReference();
+        System.out.println("start");
+        for (String opName : opNames) {
+            JnaUtils.LIB.NNGetOpHandle(opName, ref);
+
+            String functionName = JnaUtils.getOpNamePrefix(opName);
+
+//            System.out.println("Name: " + opName + "/" + functionName);
+            FunctionInfo fi = JnaUtils.getFunctionByName(opName, functionName, ref.getValue());
+            System.out.println("Name: " + fi.getName());
+            map.put(functionName, fi);
+            ref.setValue(null);
+        }
+        System.out.println("ok");
+    }
+
+//    public static void test4() {
+//        Set<String> opNames = JnaUtils.getAllOpNames();
+//        Map<String, FunctionInfo> map = new ConcurrentHashMap<>();
+//
+//        PointerByReference ref = REFS.acquire();
+//        for (String opName : opNames) {
+//            checkCall(LIB.NNGetOpHandle(opName, ref));
+//
+//            String functionName = getOpNamePrefix(opName);
+//
+//            // System.out.println("Name: " + opName + "/" + functionName);
+//            map.put(functionName, getFunctionByName(opName, functionName, ref.getValue()));
+//            ref.setValue(null);
+//        }
+//        REFS.recycle(ref);
+//        return map;
+//    }
 
 }

@@ -2,8 +2,10 @@ package org.apache.mxnet.integration.tests.api;
 
 import com.sun.jna.Pointer;
 import org.apache.mxnet.api.ndarray.NDArray;
+import org.apache.mxnet.api.ndarray.NDManager;
 import org.apache.mxnet.api.util.PairList;
 import org.apache.mxnet.engine.MxNDArray;
+import org.apache.mxnet.engine.MxNDManager;
 import org.apache.mxnet.integration.tests.jna.JnaUtilTest;
 import org.apache.mxnet.jna.JnaUtils;
 import org.slf4j.Logger;
@@ -20,7 +22,7 @@ public class NDArrayTest {
 
         Pointer handle = pairList.get(0).getValue();
 
-        MxNDArray nDArray = MxNDArray.create(handle);
+        MxNDArray nDArray = (MxNDManager) (NDManager.newBaseManager()).create(handle);
 
         nDArray.toString();
         System.out.println("ok");

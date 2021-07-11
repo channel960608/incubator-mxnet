@@ -21,8 +21,14 @@ import org.apache.mxnet.api.ndarray.types.SparseFormat;
 import org.apache.mxnet.api.ndarray.types.SparseNDArray;
 import org.apache.mxnet.api.util.Float16Utils;
 
+import javax.xml.crypto.Data;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.DoubleBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
@@ -44,16 +50,8 @@ import java.util.stream.LongStream;
  */
 public interface NDArray extends NDResource {
 
-    /**
-     * Decodes {@code NDArray} from bytes.
-     *
-     * @param manager {@link NDManager} used to create this {@code NDArray}
-     * @param byteArray data used to decode
-     * @return decoded {@code NDArray}
-     */
-    static NDArray decode(NDManager manager, byte[] byteArray) {
-        return manager.decode(byteArray);
-    }
+
+
 
     /**
      * Returns the name of this {@code NDArray}.
@@ -645,11 +643,14 @@ public interface NDArray extends NDResource {
      * @return a copy of this {@code NDArray}
      */
     default NDArray duplicate() {
+
         NDArray array = getManager().create(getShape(), getDataType(), getDevice());
         array.setName(getName());
         copyTo(array);
         return array;
     }
+
+
 
     /**
      * Returns portion of this {@code NDArray} given the index boolean {@code NDArray} along first
