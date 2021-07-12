@@ -114,10 +114,10 @@ public class CachedOp extends NativeResource<Pointer> {
                                     + batchSize
                                     + ") by default");
                 }
-                allInputsNDArray[pair.getValue()] = inputManager.create(new Shape(batchSize), device);
+                allInputsNDArray[pair.getValue()] = (MxNDArray) inputManager.create(new Shape(batchSize));
             }
         }
-        MxNDArray[] result = JnaUtils.cachedOpInvoke(getHandle(), allInputsNDArray, device);
+        MxNDArray[] result = JnaUtils.cachedOpInvoke(inputManager, getHandle(), allInputsNDArray, device);
         return new NDList(result);
     }
 

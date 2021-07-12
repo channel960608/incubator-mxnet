@@ -3,6 +3,8 @@ package org.apache.mxnet.api.exception;
 /** Thrown to indicate Model parameters are not in expected format or are malformed. */
 public class MalformedModelException extends ModelException{
 
+    private static final long serialVersionUID = 1L;
+
     /**
      * Constructs a new exception with the specified detail message. The cause is not initialized,
      * and may subsequently be initialized by a call to {@link #initCause}.

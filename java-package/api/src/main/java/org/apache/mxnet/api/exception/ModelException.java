@@ -2,7 +2,7 @@ package org.apache.mxnet.api.exception;
 
 public class ModelException extends BaseException{
 
-//    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
     /**
      * Constructs a new exception with the specified detail message. The cause is not initialized,

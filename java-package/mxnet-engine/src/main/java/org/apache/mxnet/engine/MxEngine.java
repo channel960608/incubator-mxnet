@@ -7,7 +7,7 @@ import org.apache.mxnet.api.nn.SymbolBlock;
 
 public class MxEngine extends Engine {
 
-    String ENGINE_NAME = "MXNet";
+    public static final String ENGINE_NAME = "MXNet";
 
     @Override
     public String getEngineName() {

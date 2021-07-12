@@ -268,13 +268,18 @@ public class MxNDManager extends BaseNDManager{
     @Override
     public void invoke(
             String operation, NDArray[] src, NDArray[] dest, PairList<String, ?> params) {
-        JnaUtils.op(operation).invoke(this, src, dest, params);
+        JnaUtils.op(operation).invoke(src, dest, params);
     }
 
     /** {@inheritDoc} */
     @Override
     public NDList invoke(String operation, NDList src, PairList<String, ?> params) {
         return new NDList(JnaUtils.op(operation).invoke(this, src.toArray(EMPTY), params));
+    }
+
+    @Override
+    public Engine getEngine() {
+        return Engine.getEngine();
     }
 
     /**
@@ -346,12 +351,6 @@ public class MxNDManager extends BaseNDManager{
      */
     public NDArray invoke(String operation, PairList<String, ?> params) {
         return invoke(operation, EMPTY, params);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public final Engine getEngine() {
-        return Engine.getEngine(MxEngine.ENGINE_NAME);
     }
 
     private NDArray fill(String opName, Shape shape, DataType dataType) {

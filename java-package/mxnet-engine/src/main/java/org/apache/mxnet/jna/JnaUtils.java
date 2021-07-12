@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.mxnet.api.Device;
 import org.apache.mxnet.api.exception.EngineException;
 import org.apache.mxnet.api.ndarray.NDArray;
+import org.apache.mxnet.api.ndarray.NDList;
 import org.apache.mxnet.api.ndarray.types.DataType;
 import org.apache.mxnet.api.ndarray.types.Shape;
 import org.apache.mxnet.api.ndarray.types.SparseFormat;
@@ -29,6 +30,7 @@ import org.apache.mxnet.api.util.PairList;
 import org.apache.mxnet.engine.CachedOp;
 import org.apache.mxnet.engine.MxDeviceType;
 import org.apache.mxnet.engine.MxNDArray;
+import org.apache.mxnet.engine.MxNDManager;
 import org.apache.mxnet.engine.MxSymbolBlock;
 import org.apache.mxnet.engine.Symbol;
 
@@ -63,7 +65,7 @@ public final class JnaUtils {
      * About CacheOp
      ******************************************************************************/
     public static CachedOp createCachedOp(
-            MxSymbolBlock block, boolean training) {
+            MxSymbolBlock block, MxNDManager manager, boolean training) {
         Symbol symbol = block.getSymbol();
 
         List<Parameter> parameters = block.getAllParameters();
@@ -95,7 +97,7 @@ public final class JnaUtils {
         Pointer pointer = ref.getValue();
         REFS.recycle(ref);
 
-        return new CachedOp(pointer, parameters, paramIndices, dataIndices);
+        return new CachedOp(pointer, manager, parameters, paramIndices, dataIndices);
     }
 
     public static void freeCachedOp(Pointer handle) {
@@ -311,9 +313,46 @@ public final class JnaUtils {
     /*******************************************************************************
      * About NdArray
      ******************************************************************************/
-    public static void loadNdArrayFromFile(Path path) {
-        loadNdArrayFromFile(path.toAbsolutePath());
+    public static NDList loadNdArray(MxNDManager manager, Path path, Device device) {
+        IntBuffer handlesSize = IntBuffer.allocate(1);
+        PointerByReference handlesRef = REFS.acquire();
+        PointerByReference namesRef = REFS.acquire();
+        IntBuffer namesSize = IntBuffer.allocate(1);
+        checkCall(LIB.MXNDArrayLoad(path.toString(), handlesSize, handlesRef, namesSize, namesRef));
+        int ndArrayCount = handlesSize.get();
+        int nameCount = namesSize.get();
+        if (nameCount > 0 && ndArrayCount != nameCount) {
+            throw new IllegalStateException(
+                    "Mismatch between names and arrays in checkpoint file: " + path.toString());
+        }
+        Pointer[] handles = handlesRef.getValue().getPointerArray(0, ndArrayCount);
+        NDList ndList = new NDList();
+        if (nameCount == 0) {
+            for (Pointer handle : handles) {
+                ndList.add(manager.create(handle));
+            }
+        } else {
+            String[] names = namesRef.getValue().getStringArray(0, nameCount);
+            for (int i = 0; i < ndArrayCount; i++) {
+                NDArray array = manager.create(handles[i]);
+                array.setName(names[i]);
+                ndList.add(array);
+            }
+        }
+
+        REFS.recycle(namesRef);
+        REFS.recycle(handlesRef);
+
+        // MXNet always load NDArray on CPU
+        if (Device.cpu().equals(device)) {
+            return ndList;
+        }
+
+        NDList ret = ndList.toDevice(device, true);
+        ndList.close();
+        return ret;
     }
+
 
     public static PairList<String, Pointer> loadNdArrayFromFile(String path) {
         IntBuffer handleSize = IntBuffer.allocate(1);
@@ -667,6 +706,47 @@ public final class JnaUtils {
         return pointer;
     }
 
+    public static Pointer createSparseNdArray(
+            SparseFormat fmt,
+            Device device,
+            Shape shape,
+            DataType dtype,
+            DataType[] auxDTypes,
+            Shape[] auxShapes,
+            boolean delayedAlloc) {
+        int[] shapeArray = Arrays.stream(shape.getShape()).mapToInt(Math::toIntExact).toArray();
+        int deviceType = MxDeviceType.toDeviceType(device);
+        int deviceId = (deviceType != 1) ? device.getDeviceId() : -1;
+        int delay = delayedAlloc ? 1 : 0;
+        PointerByReference ref = REFS.acquire();
+        IntBuffer auxDTypesInt =
+                IntBuffer.wrap(Arrays.stream(auxDTypes).mapToInt(DataType::ordinal).toArray());
+        IntBuffer auxNDims =
+                IntBuffer.wrap(Arrays.stream(auxShapes).mapToInt(Shape::dimension).toArray());
+        int[] auxShapesInt = Arrays.stream(auxShapes).mapToInt(ele -> (int) ele.head()).toArray();
+        checkCall(
+                LIB.MXNDArrayCreateSparseEx(
+                        fmt.getValue(),
+                        shapeArray,
+                        shapeArray.length,
+                        deviceType,
+                        deviceId,
+                        delay,
+                        dtype.ordinal(),
+                        auxDTypes.length,
+                        auxDTypesInt,
+                        auxNDims,
+                        auxShapesInt,
+                        ref));
+        Pointer pointer = ref.getValue();
+        REFS.recycle(ref);
+        return pointer;
+    }
+
+    public static void ndArraySyncCopyFromNdArray(MxNDArray dest, MxNDArray src, int location) {
+        checkCall(LIB.MXNDArraySyncCopyFromNDArray(dest.getHandle(), src.getHandle(), location));
+    }
+
     public static int getVersion() {
         IntBuffer version = IntBuffer.allocate(1);
         checkCall(LIB.MXGetVersion(version));
@@ -674,7 +754,7 @@ public final class JnaUtils {
     }
 
     public static MxNDArray[] cachedOpInvoke(
-            Pointer cachedOpHandle, MxNDArray[] inputs, Device device) {
+            MxNDManager manager, Pointer cachedOpHandle, MxNDArray[] inputs, Device device) {
         IntBuffer buf = IntBuffer.allocate(1);
         PointerArray array = toPointerArray(inputs);
         PointerByReference ref = REFS.acquire();
@@ -689,9 +769,9 @@ public final class JnaUtils {
         MxNDArray[] output = new MxNDArray[numOutputs];
         for (int i = 0; i < numOutputs; i++) {
             if (sTypes[i] != 0) {
-                output[i] = new MxNDArray(ptrArray[i], SparseFormat.fromValue(sTypes[i]));
+                output[i] = new MxNDArray(manager, ptrArray[i], SparseFormat.fromValue(sTypes[i]));
             } else {
-                output[i] = new MxNDArray(ptrArray[i]);
+                output[i] = new MxNDArray(manager, ptrArray[i]);
             }
         }
         REFS.recycle(ref);
@@ -730,5 +810,14 @@ public final class JnaUtils {
         }
 
         return arr;
+    }
+
+    /**
+     * Others
+     */
+    public static boolean autogradIsTraining() {
+        ByteBuffer isTraining = ByteBuffer.allocate(1);
+        checkCall(LIB.MXAutogradIsTraining(isTraining));
+        return isTraining.get(0) == 1;
     }
 }

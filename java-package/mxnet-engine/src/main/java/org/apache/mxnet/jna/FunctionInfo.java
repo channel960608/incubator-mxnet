@@ -3,9 +3,11 @@ package org.apache.mxnet.jna;
 import com.sun.jna.Pointer;
 import org.apache.mxnet.api.Device;
 import org.apache.mxnet.api.ndarray.NDArray;
+import org.apache.mxnet.api.ndarray.NDManager;
 import org.apache.mxnet.api.ndarray.types.SparseFormat;
 import org.apache.mxnet.api.util.PairList;
 import org.apache.mxnet.engine.MxNDArray;
+import org.apache.mxnet.engine.MxNDManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,17 +55,18 @@ public class FunctionInfo {
      *     String>}
      * @return the error code or zero for no errors
      */
-    public NDArray[] invoke(NDArray[] src, PairList<String, ?> params) {
+    public NDArray[] invoke(NDManager manager, NDArray[] src, PairList<String, ?> params) {
         checkDevices(src);
         PairList<Pointer, SparseFormat> pairList =
                 JnaUtils.imperativeInvoke(handle, src, null, params);
+        final MxNDManager mxManager = (MxNDManager) manager;
         return pairList.stream()
                 .map(
                         pair -> {
                             if (pair.getValue() != SparseFormat.DENSE) {
-                                return new MxNDArray(pair.getKey(), pair.getValue());
+                                return mxManager.create(pair.getKey(), pair.getValue());
                             }
-                            return new MxNDArray(pair.getKey());
+                            return mxManager.create(pair.getKey());
                         })
                 .toArray(MxNDArray[]::new);
     }

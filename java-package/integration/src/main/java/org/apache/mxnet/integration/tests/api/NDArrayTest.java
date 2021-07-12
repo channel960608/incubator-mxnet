@@ -22,9 +22,9 @@ public class NDArrayTest {
 
         Pointer handle = pairList.get(0).getValue();
 
-        MxNDArray nDArray = (MxNDManager) (NDManager.newBaseManager()).create(handle);
+//        MxNDArray nDArray = (MxNDManager) (NDManager.newBaseManager()).create(handle);
 
-        nDArray.toString();
+//        nDArray.toString();
         System.out.println("ok");
     }
 

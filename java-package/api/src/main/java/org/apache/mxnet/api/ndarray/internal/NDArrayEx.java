@@ -8,6 +8,7 @@ import org.apache.mxnet.api.ndarray.index.NDArrayIndexer;
 import org.apache.mxnet.api.ndarray.types.DataType;
 import org.apache.mxnet.api.ndarray.types.Shape;
 import org.apache.mxnet.api.ndarray.types.SparseFormat;
+import org.apache.mxnet.api.nn.recurrent.RNN;
 
 import java.util.List;
 
@@ -314,18 +315,17 @@ public interface NDArrayEx {
      *     feature)
      * @return the output of the operation
      */
-    // TODO
-//    NDList rnn(
-//            NDArray input,
-//            NDArray state,
-//            NDList params,
-//            boolean hasBiases,
-//            int numLayers,
-//            RNN.Activation activation,
-//            double dropRate,
-//            boolean training,
-//            boolean bidirectional,
-//            boolean batchFirst);
+    NDList rnn(
+            NDArray input,
+            NDArray state,
+            NDList params,
+            boolean hasBiases,
+            int numLayers,
+            RNN.Activation activation,
+            double dropRate,
+            boolean training,
+            boolean bidirectional,
+            boolean batchFirst);
 
     /**
      * Applies GRU operation to input data.
