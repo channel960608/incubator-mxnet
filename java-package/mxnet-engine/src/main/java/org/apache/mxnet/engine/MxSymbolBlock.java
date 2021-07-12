@@ -1,6 +1,7 @@
 package org.apache.mxnet.engine;
 
 import org.apache.mxnet.api.exception.MalformedModelException;
+import org.apache.mxnet.api.ndarray.NDArray;
 import org.apache.mxnet.api.ndarray.NDList;
 import org.apache.mxnet.api.ndarray.NDManager;
 import org.apache.mxnet.api.ndarray.types.Shape;
@@ -8,11 +9,14 @@ import org.apache.mxnet.api.nn.AbstractSymbolBlock;
 import org.apache.mxnet.api.nn.Parameter;
 import org.apache.mxnet.api.training.ParameterStore;
 import org.apache.mxnet.api.util.PairList;
+import org.apache.mxnet.jna.JnaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -23,8 +27,10 @@ import java.util.Set;
 public class MxSymbolBlock extends AbstractSymbolBlock {
 
     private static final Logger logger = LoggerFactory.getLogger(MxSymbolBlock.class);
+
     private static final byte VERSION = 3;
 
+    private NDManager manager;
     private CachedOp op;
     private Symbol symbol;
     private List<Parameter> mxNetParams; // includes input data
@@ -40,10 +46,12 @@ public class MxSymbolBlock extends AbstractSymbolBlock {
      * <p>You can create a {@code MxSymbolBlock} using {@link ai.djl.Model#load(java.nio.file.Path,
      * String)}.
      *
+     * @param manager the manager to use for the block
      * @param symbol the symbol containing the block's symbolic graph
      */
-    public MxSymbolBlock(Symbol symbol) {
+    public MxSymbolBlock(NDManager manager, Symbol symbol) {
         super(VERSION);
+        this.manager = manager;
         this.symbol = symbol;
         initBlock();
     }
@@ -51,9 +59,11 @@ public class MxSymbolBlock extends AbstractSymbolBlock {
     /**
      * Constructs an empty {@code MxSymbolBlock}.
      *
+     * @param manager the manager to use for the block
      */
-    public MxSymbolBlock() {
+    public MxSymbolBlock(NDManager manager) {
         super(VERSION);
+        this.manager = manager;
     }
 
     /**
@@ -100,19 +110,175 @@ public class MxSymbolBlock extends AbstractSymbolBlock {
         return symbol;
     }
 
-    @Override
-    protected NDList forwardInternal(ParameterStore parameterStore, NDList inputs, boolean training, PairList<String, Object> params) {
-        return null;
+    /**
+     * Applies Optimization algorithm for the model.
+     *
+     * @param optimization the name of the optimization
+     */
+    public void optimizeFor(String optimization) {
+        Symbol newSymbol = symbol.optimizeFor(optimization, manager.getDevice());
+        symbol.close();
+        symbol = newSymbol;
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public PairList<String, Shape> describeInput() {
+        if (inputDescriptions == null) {
+            inputDescriptions = new PairList<>();
+            for (String name : inputNames) {
+                // Add empty shapes as input shapes are not saved
+                // in MXNet models
+                logger.warn(
+                        "Input shapes are unknown, please run predict or forward once"
+                                + "and call describeInput again.");
+                inputDescriptions.add(name, new Shape());
+            }
+        }
+        return inputDescriptions;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public PairList<String, Shape> describeOutput() {
+        if (outputDescriptions == null) {
+            logger.warn(
+                    "Output shapes are unknown, please run predict or forward once"
+                            + "and call describeOutput again.");
+        }
+        return outputDescriptions;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    protected NDList forwardInternal(
+            ParameterStore parameterStore,
+            NDList inputs,
+            boolean training,
+            PairList<String, Object> params) {
+        if (first) {
+            synchronized (MxSymbolBlock.class) {
+                if (first) {
+                    // create CachedOp is not thread-safe
+                    // add synchronized block to avoid creating multiple CachedOps
+                    op = JnaUtils.createCachedOp(this, (MxNDManager) manager, training);
+                    inputDescriptions = new PairList<>();
+                    outputDescriptions = new PairList<>();
+                    for (NDArray array : inputs) {
+                        inputDescriptions.add(array.getName(), array.getShape());
+                    }
+                    NDList outputs = op.forward(parameterStore, inputs, training);
+                    for (NDArray array : outputs) {
+                        outputDescriptions.add(array.getName(), array.getShape());
+                    }
+                    first = false;
+                    return outputs;
+                }
+            }
+        }
+        return op.forward(parameterStore, inputs, training);
+    }
+
+    /** {@inheritDoc} */
     @Override
     public Shape[] getOutputShapes(Shape[] inputShapes) {
-        return new Shape[0];
+        if (outputShapes == null) {
+            String[] outputNames = symbol.getOutputNames();
+            outputShapes = new Shape[outputNames.length];
+            for (int i = 0; i < outputShapes.length; ++i) {
+                outputShapes[i] = getParameterShape(outputNames[i], inputShapes);
+            }
+        }
+        return outputShapes;
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void loadParameters(NDManager manager, DataInputStream is) throws IOException, MalformedModelException {
+    public void removeLastBlock() {
+        List<String> layerNames = getLayerNames();
+        String layerName = layerNames.get(layerNames.size() - 2);
 
+        Symbol sliced = symbol.get(layerName);
+        symbol.close();
+        symbol = sliced;
+
+        HashSet<String> set = new HashSet<>(Arrays.asList(symbol.getAllNames()));
+        for (int i = mxNetParams.size() - 1; i >= 0; --i) {
+            Parameter parameter = mxNetParams.get(i);
+            if (!set.contains(parameter.getName())) {
+                mxNetParams.remove(i).close();
+                parameters.remove(parameter.getName(), parameter);
+            }
+        }
+    }
+
+    private Shape getParameterShape(String name, Shape[] inputShapes) {
+        if (paramShapes == null) {
+            PairList<String, Shape> pairs = new PairList<>();
+            for (int i = 0; i < inputNames.size(); i++) {
+                pairs.add(inputNames.get(i), inputShapes[i]);
+            }
+            paramShapes = symbol.inferShape(pairs);
+        }
+        if (paramShapes.containsKey(name)) {
+            return paramShapes.get(name);
+        } else {
+            throw new IllegalArgumentException("Name " + name + " not found");
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void saveParameters(DataOutputStream os) throws IOException {
+        os.writeByte(VERSION);
+        String json = symbol.toJsonString();
+        // symbol size may go beyond os.writeUTF() size (65535)
+        byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+        os.writeInt(bytes.length);
+        os.write(bytes);
+        int size = inputNames.size();
+        os.writeInt(size);
+        for (String name : inputNames) {
+            os.writeUTF(name);
+        }
+        for (Parameter parameter : mxNetParams) {
+            parameter.save(os);
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void loadParameters(NDManager manager, DataInputStream is)
+            throws IOException, MalformedModelException {
+        byte version = is.readByte();
+        if (version > VERSION) {
+            throw new MalformedModelException("Unsupported encoding version: " + version);
+        }
+        if (version < VERSION && symbol == null) {
+            throw new IllegalStateException(
+                    "Symbol is required for version 2, please use Model to load");
+        }
+        if (version == VERSION) {
+            int len = is.readInt();
+            byte[] bytes = new byte[len];
+            if (is.read(bytes) == -1) {
+                throw new MalformedModelException("InputStream ends at symbol loading!");
+            }
+            // init block only if it is not set
+            symbol =
+                    Symbol.loadJson(
+                            (MxNDManager) manager, new String(bytes, StandardCharsets.UTF_8));
+            initBlock();
+        }
+        int size = is.readInt();
+        for (int i = 0; i < size; ++i) {
+            inputNames.add(is.readUTF());
+        }
+
+        for (Parameter parameter : mxNetParams) {
+            parameter.load(this.manager, is);
+        }
+        setInputNames(inputNames);
     }
 
     private void initBlock() {

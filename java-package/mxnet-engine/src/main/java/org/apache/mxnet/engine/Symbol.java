@@ -5,6 +5,7 @@ import com.sun.jna.ptr.PointerByReference;
 import org.apache.mxnet.api.Device;
 import org.apache.mxnet.api.ndarray.types.Shape;
 import org.apache.mxnet.api.util.PairList;
+import org.apache.mxnet.api.util.Utils;
 import org.apache.mxnet.jna.JnaUtils;
 import org.apache.mxnet.api.util.NativeResource;
 
@@ -20,19 +21,31 @@ import java.util.stream.Collectors;
 public class Symbol extends NativeResource<Pointer> {
 
     private String[] outputs;
+    private MxNDManager manager;
 
-    protected Symbol(Pointer handle) {
-        super(handle);
+    /**
+     * Constructs a {@code Symbol}.
+     *
+     * @param manager the manager to attach the symbol to
+     * @param pointer the symbol's native data location
+     */
+    Symbol(MxNDManager manager, Pointer pointer) {
+        super(pointer);
+        this.manager = manager;
+//        manager.attachInternal(getUid(), this);
+        //        argParams = JnaUtils.listSymbolArguments(getHandle());
+        //        auxParams = JnaUtils.listSymbolAuxiliaryStates(getHandle());
     }
 
-    public static Symbol loadFromFile(String path) {
+
+    public static Symbol loadFromFile(MxNDManager manager,String path) {
         Pointer p = JnaUtils.createSymbolFromFile(path);
-        return new Symbol(p);
+        return new Symbol(manager, p);
     }
 
-    public static Symbol load(String path) {
+    public static Symbol load(MxNDManager manager, String path) {
         Pointer pointer = JnaUtils.createSymbolFromFile(path);
-        return new Symbol(pointer);
+        return new Symbol(manager, pointer);
     }
 
     /**
@@ -41,9 +54,36 @@ public class Symbol extends NativeResource<Pointer> {
      * @param json the json string of the symbol.
      * @return the new symbol
      */
-    public static Symbol loadJson(String json) {
+    public static Symbol loadJson(MxNDManager manager, String json) {
         Pointer pointer = JnaUtils.createSymbolFromString(json);
-        return new Symbol(pointer);
+        return new Symbol(manager, pointer);
+    }
+
+    /**
+     * Returns the output symbol by index.
+     *
+     * @param index the index of the output
+     * @return the symbol output as a new symbol
+     */
+    public Symbol get(int index) {
+        Pointer pointer = JnaUtils.getSymbolOutput(getInternals().getHandle(), index);
+        return new Symbol(manager, pointer);
+    }
+
+    /**
+     * Returns the output symbol with the given name.
+     *
+     * @param name the name of the symbol to return
+     * @return the output symbol
+     * @throws IllegalArgumentException Thrown if no output matches the name
+     */
+    public Symbol get(String name) {
+        String[] out = getInternalOutputNames();
+        int index = Utils.indexOf(out, name);
+        if (index < 0) {
+            throw new IllegalArgumentException("Cannot find output that matches name: " + name);
+        }
+        return get(index);
     }
 
     /**
@@ -120,7 +160,7 @@ public class Symbol extends NativeResource<Pointer> {
      */
     public Symbol getInternals() {
         Pointer pointer = JnaUtils.getSymbolInternals(getHandle());
-        return new Symbol(pointer);
+        return new Symbol(manager, pointer);
     }
 
     /**
@@ -164,7 +204,16 @@ public class Symbol extends NativeResource<Pointer> {
      * @return optimized Symbol
      */
     public Symbol optimizeFor(String backend, Device device) {
-        return new Symbol(JnaUtils.optimizeFor(this, backend, device));
+        return new Symbol(manager, JnaUtils.optimizeFor(this, backend, device));
+    }
+
+    /**
+     * Converts Symbol to json string for saving purpose.
+     *
+     * @return the json string
+     */
+    public String toJsonString() {
+        return JnaUtils.getSymbolString(getHandle());
     }
 
 }

@@ -1634,19 +1634,6 @@ public class MxNDArray extends NativeResource<Pointer> implements LazyNDArray {
         }
     }
 
-    public static void test2() {
-        try {
-            Symbol symbol =
-                    Symbol.loadFromFile(
-                            "/Users/cspchen/Downloads/mxnet_resnet18/resnet18_v1-symbol.json");
-//            String strSymbol = JnaUtils.printSymbol(symbol.getHandle());
-//            String[] strs = JnaUtils.listSymbolOutputs(symbol.getHandle());
-        } catch (Exception e) {
-            e.printStackTrace();
-            int a = 1;
-        }
-    }
-
     public static void test3() {
         Set<String> opNames = JnaUtils.getAllOpNames();
         Map<String, FunctionInfo> map = new ConcurrentHashMap<>();

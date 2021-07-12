@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +46,8 @@ public final class JnaUtils {
 
 //    private static final Map<String, FunctionInfo> OPS = getNdArrayFunctions();
     private static final Map<String, FunctionInfo> OPS = null;
+
+    private static final Set<String> FEATURES = getFeaturesInternal();
 
     public static final String[] EMPTY_ARRAY = new String[0];
     // TODO
@@ -309,6 +312,21 @@ public final class JnaUtils {
         Arrays.stream(placeHolders).forEach(REFS::recycle);
         return ptr;
     }
+
+    public static String getSymbolString(Pointer symbol) {
+        String[] holder = new String[1];
+        checkCall(LIB.MXSymbolSaveToJSON(symbol, holder));
+        return holder[0];
+    }
+
+    public static Pointer getSymbolOutput(Pointer symbol, int index) {
+        PointerByReference ref = REFS.acquire();
+        checkCall(LIB.MXSymbolGetOutput(symbol, index, ref));
+        Pointer pointer = ref.getValue();
+        REFS.recycle(ref);
+        return pointer;
+    }
+
 
     /*******************************************************************************
      * About NdArray
@@ -812,12 +830,77 @@ public final class JnaUtils {
         return arr;
     }
 
-    /**
+    /*****************************************************************************
      * Others
-     */
+     *****************************************************************************/
+    private static Set<String> getFeaturesInternal() {
+        PointerByReference ref = REFS.acquire();
+        NativeSizeByReference outSize = new NativeSizeByReference();
+        checkCall(LIB.MXLibInfoFeatures(ref, outSize));
+
+        int size = outSize.getValue().intValue();
+        if (size == 0) {
+            REFS.recycle(ref);
+            return Collections.emptySet();
+        }
+
+        LibFeature pointer = new LibFeature(ref.getValue());
+        pointer.read();
+
+        LibFeature[] features = (LibFeature[]) pointer.toArray(size);
+
+        Set<String> set = new HashSet<>();
+        for (LibFeature feature : features) {
+            if (feature.getEnabled() == 1) {
+                set.add(feature.getName());
+            }
+        }
+        REFS.recycle(ref);
+        return set;
+    }
+
+    public static Set<String> getFeatures() {
+        return FEATURES;
+    }
+
     public static boolean autogradIsTraining() {
         ByteBuffer isTraining = ByteBuffer.allocate(1);
         checkCall(LIB.MXAutogradIsTraining(isTraining));
         return isTraining.get(0) == 1;
+    }
+
+    public static void waitAll() {
+        checkCall(LIB.MXNDArrayWaitAll());
+    }
+
+    public static void loadLib(String path, boolean verbose) {
+        int intVerbose = verbose ? 1 : 0;
+        PointerByReference ret = REFS.acquire();
+        checkCall(LIB.MXLoadLib(path, intVerbose, ret));
+        // TODO : what to return?
+        REFS.recycle(ret);
+    }
+
+
+
+    /*****************************************************************************
+     * Tests
+     *****************************************************************************/
+    public static void main(String... args) {
+        Set<String> opNames = JnaUtils.getAllOpNames();
+        Map<String, FunctionInfo> map = new ConcurrentHashMap<>();
+
+        PointerByReference ref = REFS.acquire();
+        for (String opName : opNames) {
+            checkCall(LIB.NNGetOpHandle(opName, ref));
+
+            String functionName = getOpNamePrefix(opName);
+
+            // System.out.println("Name: " + opName + "/" + functionName);
+            map.put(functionName, getFunctionByName(opName, functionName, ref.getValue()));
+            ref.setValue(null);
+        }
+        REFS.recycle(ref);
+        return;
     }
 }

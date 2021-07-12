@@ -1,41 +1,34 @@
 package org.apache.mxnet.api.engine;
 
 import org.apache.mxnet.api.Device;
+import org.apache.mxnet.api.exception.EngineException;
 import org.apache.mxnet.api.ndarray.NDManager;
 import org.apache.mxnet.api.nn.SymbolBlock;
+import org.apache.mxnet.api.util.Utils;
 import org.apache.mxnet.api.util.cuda.CudaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Iterator;
+import java.lang.management.MemoryUsage;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.concurrent.ConcurrentHashMap;
 
-
-//TODO
 public abstract class Engine {
 
     private static final Logger logger = LoggerFactory.getLogger(Engine.class);
-//    private static final String DEFAULT_ENGINE = initEngine();
 
-    private static EngineProvider ENGINE_PROVIDE = initEngineProvider();
+    private static final Map<String, EngineProvider> ALL_ENGINES = new ConcurrentHashMap<>();
+
+    private static final String DEFAULT_ENGINE = initEngine();
 
     private Device defaultDevice;
 
     // use object to check if it's set
     private Integer seed;
-
-    private static synchronized EngineProvider initEngineProvider() {
-        ServiceLoader<EngineProvider> loaders = ServiceLoader.load(EngineProvider.class);
-        Iterator<EngineProvider> loaderIterator = loaders.iterator();
-        if (loaderIterator.hasNext()) {
-            EngineProvider engineProvider = loaderIterator.next();
-            logger.debug("Found EngineProvider for engine: {}", engineProvider.getEngineName());
-            return engineProvider;
-        } else {
-            logger.debug("No EngineProvider found");
-            return null;
-        }
-    }
 
     /**
      * Returns the name of the Engine.
@@ -45,20 +38,57 @@ public abstract class Engine {
     public abstract String getEngineName();
 
     public static Engine getInstance() {
-        return getEngine();
+        if (DEFAULT_ENGINE == null) {
+            throw new EngineException(
+                    "No deep learning engine found."
+                            + System.lineSeparator()
+                            + "Please refer to https://github.com/deepjavalibrary/djl/blob/master/docs/development/troubleshooting.md for more details.");
+        }
+        return getEngine(System.getProperty("ai.djl.default_engine", DEFAULT_ENGINE));
     }
 
     /**
      * Returns the {@code Engine} with the given name.
      *
+     * @param engineName the name of Engine to retrieve
      * @return the instance of {@code Engine}
      * @see EngineProvider
      */
-    public static Engine getEngine() {
-        if (ENGINE_PROVIDE == null) {
-            throw new IllegalArgumentException("Deep learning engine not found");
+    public static Engine getEngine(String engineName) {
+        EngineProvider provider = ALL_ENGINES.get(engineName);
+        if (provider == null) {
+            throw new IllegalArgumentException("Deep learning engine not found: " + engineName);
         }
-        return ENGINE_PROVIDE.getEngine();
+        return provider.getEngine();
+    }
+
+    private static synchronized String initEngine() {
+        ServiceLoader<EngineProvider> loaders = ServiceLoader.load(EngineProvider.class);
+        for (EngineProvider provider : loaders) {
+            logger.debug("Found EngineProvider: {}", provider.getEngineName());
+            ALL_ENGINES.put(provider.getEngineName(), provider);
+        }
+
+        if (ALL_ENGINES.isEmpty()) {
+            logger.debug("No engine found from EngineProvider");
+            return null;
+        }
+
+        String defaultEngine = System.getenv("DJL_DEFAULT_ENGINE");
+        defaultEngine = System.getProperty("ai.djl.default_engine", defaultEngine);
+        if (defaultEngine == null || defaultEngine.isEmpty()) {
+            int rank = Integer.MAX_VALUE;
+            for (EngineProvider provider : ALL_ENGINES.values()) {
+                if (provider.getEngineRank() < rank) {
+                    defaultEngine = provider.getEngineName();
+                    rank = provider.getEngineRank();
+                }
+            }
+        } else if (!ALL_ENGINES.containsKey(defaultEngine)) {
+            throw new EngineException("Unknown default engine: " + defaultEngine);
+        }
+        logger.debug("Found default engine: {}", defaultEngine);
+        return defaultEngine;
     }
 
     /**
@@ -109,4 +139,63 @@ public abstract class Engine {
      * @return Empty {@link SymbolBlock} for static graph
      */
     public abstract SymbolBlock newSymbolBlock(NDManager manager);
+
+    /** Prints debug information about the environment for debugging environment issues. */
+    @SuppressWarnings("PMD.SystemPrintln")
+    public static void debugEnvironment() {
+        System.out.println("----------- System Properties -----------");
+        System.getProperties().forEach((k, v) -> System.out.println(k + ": " + v));
+
+        System.out.println();
+        System.out.println("--------- Environment Variables ---------");
+        System.getenv().forEach((k, v) -> System.out.println(k + ": " + v));
+
+        System.out.println();
+        System.out.println("-------------- Directories --------------");
+        try {
+            Path temp = Paths.get(System.getProperty("java.io.tmpdir"));
+            System.out.println("temp directory: " + temp);
+            Path tmpFile = Files.createTempFile("test", ".tmp");
+            Files.delete(tmpFile);
+
+            Path cacheDir = Utils.getCacheDir();
+            System.out.println("DJL cache directory: " + cacheDir.toAbsolutePath());
+
+            Path path = Utils.getEngineCacheDir();
+            System.out.println("Engine cache directory: " + path.toAbsolutePath());
+            Files.createDirectories(path);
+            if (!Files.isWritable(path)) {
+                System.out.println("Engine cache directory is not writable!!!");
+            }
+        } catch (Throwable e) {
+            e.printStackTrace(System.out);
+        }
+
+        System.out.println();
+        System.out.println("------------------ CUDA -----------------");
+        int gpuCount = Device.getGpuCount();
+        System.out.println("GPU Count: " + gpuCount);
+        System.out.println("Default Device: " + Device.defaultDevice());
+        if (gpuCount > 0) {
+            System.out.println("CUDA: " + CudaUtils.getCudaVersionString());
+            System.out.println("ARCH: " + CudaUtils.getComputeCapability(0));
+        }
+        for (int i = 0; i < gpuCount; ++i) {
+            Device device = Device.gpu(i);
+            MemoryUsage mem = CudaUtils.getGpuMemory(device);
+            System.out.println("GPU(" + i + ") memory used: " + mem.getCommitted() + " bytes");
+        }
+
+        System.out.println();
+        System.out.println("----------------- Engines ---------------");
+        System.out.println("Default Engine: " + DEFAULT_ENGINE);
+        for (EngineProvider provider : ALL_ENGINES.values()) {
+            System.out.println(provider.getEngineName() + ": " + provider.getEngineRank());
+            try {
+                provider.getEngine();
+            } catch (EngineException e) {
+                e.printStackTrace(System.out);
+            }
+        }
+    }
 }

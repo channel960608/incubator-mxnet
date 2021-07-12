@@ -277,9 +277,10 @@ public class MxNDManager extends BaseNDManager{
         return new NDList(JnaUtils.op(operation).invoke(this, src.toArray(EMPTY), params));
     }
 
+    /** {@inheritDoc} */
     @Override
-    public Engine getEngine() {
-        return Engine.getEngine();
+    public final Engine getEngine() {
+        return Engine.getEngine(MxEngine.ENGINE_NAME);
     }
 
     /**
