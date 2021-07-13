@@ -34,7 +34,7 @@ run {
     jvmArgs "-Xverify:none"
 //    args("-p=org.apache.mxnet.integration.tests.", "-m=loadNdArrayTest")
 //    args("-p=org.apache.mxnet.integration.tests.", "-m=mxnetLibNdArrayLoadSaveFreeCallTest")
-    args("-p=org.apache.mxnet.integration.tests.", "-m=loadCachedOp")
+    args("-p=org.apache.mxnet.integration.tests.", "-m=ndarrayTest")
 }
 
 test {

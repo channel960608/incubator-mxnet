@@ -38,7 +38,7 @@ public class MxNDManager extends BaseNDManager{
         this.version = version;
     }
 
-    static MxNDManager getSystemManager() {
+    public static MxNDManager getSystemManager() {
         return SYSTEM_MANAGER;
     }
 

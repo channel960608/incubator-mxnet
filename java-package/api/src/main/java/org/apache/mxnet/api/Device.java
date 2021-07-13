@@ -30,6 +30,8 @@ public final class Device {
 
     private int deviceId;
 
+    public static final Device DEFAULT_DEVICE = CPU;
+
     /**
      * Creates a {@code Device} with basic information.
      *

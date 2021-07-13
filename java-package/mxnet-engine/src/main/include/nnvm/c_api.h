@@ -78,7 +78,7 @@ NNVM_DLL int NNListAllOpNames(nn_uint* out_size, const char*** out_array);
 /*!
  * \brief Get operator handle given name.
  * \param op_name The name of the operator.
- * \param op_out The returnning op handle.
+ * \param op_out The returning op handle.
  */
 NNVM_DLL int NNGetOpHandle(const char* op_name, OpHandle* op_out);
 

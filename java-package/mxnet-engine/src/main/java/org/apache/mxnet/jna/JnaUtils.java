@@ -44,8 +44,8 @@ public final class JnaUtils {
             "_contrib_", "_linalg_", "_sparse_", "_image_", "_random_"
     };
 
-//    private static final Map<String, FunctionInfo> OPS = getNdArrayFunctions();
-    private static final Map<String, FunctionInfo> OPS = null;
+    private static final Map<String, FunctionInfo> OPS = getNdArrayFunctions();
+//    private static final Map<String, FunctionInfo> OPS = null;
 
     private static final Set<String> FEATURES = getFeaturesInternal();
 
@@ -895,12 +895,17 @@ public final class JnaUtils {
             checkCall(LIB.NNGetOpHandle(opName, ref));
 
             String functionName = getOpNamePrefix(opName);
-
+            System.out.println(ref.getValue());
             // System.out.println("Name: " + opName + "/" + functionName);
-            map.put(functionName, getFunctionByName(opName, functionName, ref.getValue()));
+            FunctionInfo functionInfo = getFunctionByName(opName, functionName, ref.getValue());
+            map.put(functionName, functionInfo);
+//            map.put(functionName, "1");
+            System.out.println(opName);
+            System.out.println(functionInfo.getName());
             ref.setValue(null);
         }
         REFS.recycle(ref);
-        return;
+        System.out.println(map.size());
+
     }
 }
