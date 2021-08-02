@@ -18,7 +18,7 @@ jobs:
         run: |
           pwd
       - name: Test Working directory
-        working-directory: ./java-package
+        working-directory: java-package
         run: |
           pwd
       - name: Setup python
