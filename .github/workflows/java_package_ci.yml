@@ -16,16 +16,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: Test Environment
-        run: |
-          pwd
-      - name: Test Working directory
-        working-directory: ./java-package
-        run: |
-          pwd
-      - name: Test Environment2
-        run: |
-          pwd
       - name: Setup python
         uses: actions/setup-python@v2
         with:
