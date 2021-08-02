@@ -13,19 +13,14 @@ on:
 jobs:
   build:
     runs-on: ubuntu-18.04
-    defaults:
-      run:
-        working-directory: ./incubator-mxnet
     steps:
       - name: Test Environment
         run: |
           pwd
-          ls
       - name: Test Working directory
         working-directory: ./java-package
         run: |
           pwd
-          ls
       - name: Setup python
         uses: actions/setup-python@v2
         with:
