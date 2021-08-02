@@ -15,6 +15,27 @@ jobs:
       run:
         working-directory: ./java-package
     steps:
+      - name: Setup python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.6'
+          architecture: x64
+      - name: Install Dependencies
+        run: |
+          brew install nasm automake ninja libtool cmake pkgconfig protobuf hdf5 zlib ccache
+          ccache -M 500M  # Limit the ccache size; Github's overall cache limit is 5GB
+          python -m pip install -r ci/docker/install/requirements
+        working-directory: ./
+        shell: bash
+      - name: Build project
+        run: |
+          CMAKE_STATICBUILD=1 ./tools/staticbuild/build.sh cpu
+        working-directory: ./
+      - name: Set Mxnet Library Environment
+        run: |
+          export MXNET_LIBRARY_PATH=build
+          echo $MXNET_LIBRARY_PATH
+        working-directory: ./
       - uses: actions/checkout@v2
       - name: Set up JDK 8
         uses: actions/setup-java@v2
