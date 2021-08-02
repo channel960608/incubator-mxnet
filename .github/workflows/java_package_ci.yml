@@ -18,9 +18,12 @@ jobs:
         uses: actions/checkout@v2
       - name: Test Environment
         run: |
-          ls
+          pwd
       - name: Test Working directory
-        working-directory: ./incubator-mxnet/java-package
+        working-directory: ./java-package
+        run: |
+          pwd
+      - name: Test Environment2
         run: |
           pwd
       - name: Setup python
