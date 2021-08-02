@@ -13,9 +13,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-18.04
-    defaults:
-      run:
-        working-directory: ./java-package
     steps:
       - name: Setup python
         uses: actions/setup-python@v2
@@ -23,18 +20,15 @@ jobs:
           python-version: '3.6'
           architecture: x64
       - name: Install Dependencies
-        working-directory: ../
         run: |
           brew install nasm automake ninja libtool cmake pkgconfig protobuf hdf5 zlib ccache
           ccache -M 500M  # Limit the ccache size; Github's overall cache limit is 5GB
           python -m pip install -r ci/docker/install/requirements
         shell: bash
       - name: Build Mxnet Project
-        working-directory: ../
         run: |
           CMAKE_STATICBUILD=1 ./tools/staticbuild/build.sh cpu
       - name: Set Mxnet Library Environment
-        working-directory: ../
         run: |
           export MXNET_LIBRARY_PATH=build
           echo $MXNET_LIBRARY_PATH
@@ -46,9 +40,12 @@ jobs:
           distribution: 'adopt'
       - name: Validate Gradle wrapper
         uses: gradle/wrapper-validation-action@v1
+        with:
+          working-directory: ./java-package
       - name: Cache Gradle packages
         uses: actions/cache@v2
         with:
+          working-directory: ./java-package
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
@@ -56,10 +53,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
       - name: Run Integration Test
+        working-directory: ./java-package
         run: ./gradlew :integration:run
       - name: Cleanup Gradle Cache
         # Remove some files from the Gradle cache, so they aren't cached by GitHub Actions.
         # Restoring these files from a GitHub Actions cache might cause problems for future builds.
+        working-directory: ./java-package
         run: |
           rm -f ~/.gradle/caches/modules-2/modules-2.lock
           rm -f ~/.gradle/caches/modules-2/gc.properties
