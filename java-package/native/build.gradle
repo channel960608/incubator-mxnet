@@ -22,29 +22,33 @@ plugins {
 
 group = "org.apache.mxnet"
 
-def VERSION = "1.8.0"
+def VERSION = "2.0.0"
 boolean isRelease = project.hasProperty("release") || project.hasProperty("staging")
 version = VERSION + (isRelease ? "" : "-SNAPSHOT")
 
-// Create a placeholder jar without classifier to pass sonatype tests but throws an Exception if loaded
+task syncBuiltMxnetLib(type: Sync) {
+    from "${rootProject.projectDir.parent}/build"
+    into "${project.buildDir}/mxnet/native/lib"
+    include "libmxnet.*"
+}
+
+// Create mxnet native library jar without classifier
 jar {
-    def placeholder = "${project.buildDir}/placeholder"
-    // this line is to enforce gradle to build the jar
-    // otherwise it don't generate the placeholder jar at times
-    // when there is no java code inside src/main
+    syncBuiltMxnetLib
+    def srcDir = "${project.buildDir}/mxnet"
     outputs.dir file("build/libs")
     doFirst {
         def versionName = project.version
         if (!isRelease) {
             versionName += String.format("-%s", new Date().format('yyyyMMdd'))
         }
-        def dir = file("${placeholder}/native/lib")
+        def dir = file("${srcDir}/native/lib")
         dir.mkdirs()
-        def propFile = file("${placeholder}/native/lib/mxnet.properties")
-        propFile.text = "placeholder=true\nversion=${versionName}\n"
+        def propFile = file("${srcDir}/native/lib/mxnet.properties")
+        propFile.text = "version=${versionName}\nlibraries=libmxnet.dylib"
     }
 
-    from placeholder
+    from srcDir
 }
 
 java {

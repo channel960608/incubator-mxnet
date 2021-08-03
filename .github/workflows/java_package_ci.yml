@@ -1,15 +1,16 @@
 name: Java Package CI
 
-on:
-  push:
-    paths:
-      - java-package/**
-      - .github/workflows/java_package_ci.yml
-  pull_request:
-    paths:
-      - java-package/**
-      - .github/workflows/java_package_ci.yml
+#on:
+#  push:
+#    paths:
+#      - java-package/**
+#      - .github/workflows/java_package_ci.yml
+#  pull_request:
+#    paths:
+#      - java-package/**
+#      - .github/workflows/java_package_ci.yml
 
+on: []
 jobs:
   build:
     runs-on: macos-latest

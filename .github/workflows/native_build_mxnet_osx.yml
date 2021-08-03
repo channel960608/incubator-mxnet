@@ -1,4 +1,4 @@
-name: Native Build MXNet OSX
+name: Native Build MXNet OSX and Upload jar
 
 on: [push]
 #on:
@@ -21,11 +21,6 @@ jobs:
           git --version
           clang --version
           CMAKE_STATICBUILD=1 ./tools/staticbuild/build.sh cpu
-      - name: Upload libmxnet.dylib
-        uses: actions/upload-artifact@v2
-        with:
-          name: libmxnet.dylib
-          path: build/libmxnet.dylib
 
       - name: Set up JDK 8
         uses: actions/setup-java@v2
