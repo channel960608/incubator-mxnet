@@ -32,8 +32,7 @@ jobs:
         with:
           working-directory: ./java-package
       - name: jar mxnet library
-        with:
-          working-directory: ./java-package
+        working-directory: ./java-package
         run: |
           ./gradlew :native:jar
           ls native/build/libs
