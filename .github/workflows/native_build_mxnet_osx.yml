@@ -36,4 +36,4 @@ jobs:
         run: |
           pwd
           ./gradlew :native:jar
-          ls native/build/libs
+#          ls native/build/libs
