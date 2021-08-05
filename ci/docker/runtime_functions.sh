@@ -306,9 +306,6 @@ build_centos7_gpu() {
     ninja
 }
 
-build_ubuntu_cpu() {
-    build_ubuntu_cpu_openblas
-}
 
 build_ubuntu_cpu() {
     build_ubuntu_cpu_openblas
@@ -325,7 +322,7 @@ java_package_integration_test() {
     apt-get update -y
     apt-get install gradle -y
     # build java prokect
-    ./gradle build -x javadoc
+    ./gradlew build -x javadoc
     # generate native library
     ./gradlew :native:buildLocalLibraryJarDefault
     ./gradlew :native:mkl-linuxJar
