@@ -34,21 +34,23 @@ task syncBuiltMxnetLib(type: Sync) {
 
 // Create mxnet native library jar without classifier
 jar {
-    syncBuiltMxnetLib
-    def srcDir = "${project.buildDir}/mxnet"
+    def placeholder = "${project.buildDir}/placeholder"
+    // this line is to enforce gradle to build the jar
+    // otherwise it don't generate the placeholder jar at times
+    // when there is no java code inside src/main
     outputs.dir file("build/libs")
     doFirst {
         def versionName = project.version
         if (!isRelease) {
             versionName += String.format("-%s", new Date().format('yyyyMMdd'))
         }
-        def dir = file("${srcDir}/native/lib")
+        def dir = file("${placeholder}/native/lib")
         dir.mkdirs()
-        def propFile = file("${srcDir}/native/lib/mxnet.properties")
-        propFile.text = "version=${versionName}\nlibraries=libmxnet.dylib"
+        def propFile = file("${placeholder}/native/lib/mxnet.properties")
+        propFile.text = "placeholder=true\nversion=${versionName}\n"
     }
 
-    from srcDir
+    from placeholder
 }
 
 java {
