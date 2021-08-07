@@ -316,6 +316,11 @@ build_ubuntu_cpu_and_test() {
     java_package_integration_test
 }
 
+build_ubuntu_gpu_and_test() {
+    build_ubuntu_gpu
+    java_package_integration_test
+}
+
 java_package_integration_test() {
     # install gradle
     add-apt-repository ppa:cwchien/gradle
