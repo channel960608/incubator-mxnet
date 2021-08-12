@@ -77,7 +77,7 @@ public class Model extends MxResource {
 
     /**
      * Create a default {@link Predictor} instance, with {@link NoOpTranslator} as default
-     * translator , and do not copy parameters to parameter store
+     * translator , and do not copy parameters to parameter store.
      *
      * @return {@link Predictor}
      */
@@ -88,7 +88,7 @@ public class Model extends MxResource {
 
     /**
      * Create a default {@link Predictor} instance, with {@link NoOpTranslator} as default
-     * translator
+     * translator.
      *
      * @param copy whether to copy the parameters to the parameter store
      * @return {@link Predictor}
@@ -99,10 +99,12 @@ public class Model extends MxResource {
     }
 
     /**
-     * Create {@link Predictor} instance, with specific {@link Translator} and {@code copy}
+     * Create {@link Predictor} instance, with specific {@link Translator} and {@code copy}.
      *
      * @param translator {@link Translator} used to convert inputs and outputs into {@link NDList}
      *     to get inferred
+     * @param <I> the input type
+     * @param <O> the output type
      * @param copy whether to copy the parameters to the parameter store
      * @return {@link Predictor}
      */
@@ -111,9 +113,10 @@ public class Model extends MxResource {
     }
 
     /**
-     * Create and initialize a MxModel from the model directory
+     * Create and initialize a MxModel from the model directory.
      *
      * @param modelPath {@code Path} model directory
+     * @return loaded {@code Model} instance
      * @throws IOException when IO operation fails in loading a resource
      */
     public static Model loadModel(Path modelPath) throws IOException {
@@ -121,9 +124,10 @@ public class Model extends MxResource {
     }
 
     /**
-     * Create and initialize a MxModel from repository Item
+     * Create and initialize a MxModel from repository Item.
      *
      * @param modelItem {@link Item} model directory
+     * @return {@link Model}
      * @throws IOException when IO operation fails in loading a resource
      */
     public static Model loadModel(Item modelItem) throws IOException {
@@ -133,10 +137,11 @@ public class Model extends MxResource {
     }
 
     /**
-     * Create and initialize a MxModel with a model name from the model directory
+     * Create and initialize a MxModel with a model name from the model directory.
      *
      * @param modelName {@link String} model name
      * @param modelPath {@link Path} model directory
+     * @return {@link Model}
      * @throws IOException when IO operation fails in loading a resource
      */
     public static Model loadModel(String modelName, Path modelPath) throws IOException {
@@ -147,10 +152,11 @@ public class Model extends MxResource {
 
     /**
      * Create a MxModel with specific model name and model directory. By default, the {@link Model}
-     * instance is managed by the top level {@link BaseMxResource}
+     * instance is managed by the top level {@link BaseMxResource}.
      *
      * @param modelName {@String} model name
      * @param modelDir {@Path} local model path
+     * @return {@link Model}
      * @throws IOException when IO operation fails in loading a resource
      */
     static Model createModel(String modelName, Path modelDir) {
@@ -160,9 +166,10 @@ public class Model extends MxResource {
     }
 
     /**
-     * Create a sample MxModel Download or find the local path for the sample model
+     * Create a sample MxModel Download or find the local path for the sample model.
      *
-     * @param item {@@Item} sample model to be created
+     * @param item {@link Item} sample model to be created
+     * @return created {@link Model} instance
      * @throws IOException when IO operation fails in loading a resource
      */
     static Model createModel(Item item) throws IOException {
@@ -212,6 +219,7 @@ public class Model extends MxResource {
      * @param prefix the model file name or path prefix
      * @param options load model options, see documentation for the specific engine
      * @throws IOException Exception for file loading
+     * @throws MalformedModelException Exception for unexpected Model parameters
      */
     public void load(Path modelPath, String prefix, Map<String, ?> options)
             throws IOException, MalformedModelException {
@@ -229,7 +237,7 @@ public class Model extends MxResource {
             }
         }
 
-        if (getMxSymbolBlock() == null) {
+        if (getSymbolBlock() == null) {
             // load MxSymbolBlock
             Path symbolFile = modelDir.resolve(prefix + "-symbol.json");
             if (Files.notExists(symbolFile)) {
@@ -246,7 +254,7 @@ public class Model extends MxResource {
         // TODO: Check if Symbol has all names that params file have
         if (options != null && options.containsKey("MxOptimizeFor")) {
             String optimization = (String) options.get("MxOptimizeFor");
-            getMxSymbolBlock().optimizeFor(optimization, getDevice());
+            getSymbolBlock().optimizeFor(optimization, getDevice());
         }
     }
 
@@ -271,11 +279,11 @@ public class Model extends MxResource {
     }
 
     private void loadParameters(Path paramFile, Map<String, ?> options)
-            throws IOException, MalformedModelException {
+            throws MalformedModelException {
 
         NDList paramNDlist = JnaUtils.loadNdArray(this, paramFile, getDevice());
 
-        List<Parameter> parameters = getMxSymbolBlock().getAllParameters();
+        List<Parameter> parameters = getSymbolBlock().getAllParameters();
         Map<String, Parameter> map = new LinkedHashMap<>();
         parameters.forEach(p -> map.put(p.getName(), p));
 
@@ -289,69 +297,145 @@ public class Model extends MxResource {
             Parameter parameter = map.remove(paramName);
             parameter.setArray(nd);
         }
-        getMxSymbolBlock().setInputNames(new ArrayList<>(map.keySet()));
+        getSymbolBlock().setInputNames(new ArrayList<>(map.keySet()));
 
         // TODO: Find a better to infer model DataType from SymbolBlock.
         dataType = paramNDlist.head().getDataType();
         logger.debug("MXNet Model {} ({}) loaded successfully.", paramFile, dataType);
     }
 
+    /**
+     * Get the modelDir from the Model.
+     *
+     * @return {@link Path} modelDir for the Model
+     */
     public Path getModelDir() {
         return modelDir;
     }
 
+    /**
+     * Set the modelDir for the Model.
+     *
+     * @param modelDir {@link Path}
+     */
     public void setModelDir(Path modelDir) {
         this.modelDir = modelDir;
     }
 
-    public SymbolBlock getMxSymbolBlock() {
+    /**
+     * Get the symbolBlock of the Model.
+     *
+     * @return {@link SymbolBlock}
+     */
+    public SymbolBlock getSymbolBlock() {
         return symbolBlock;
     }
 
+    /**
+     * Set the symbolBlock for the Model.
+     *
+     * @param symbolBlock {@link SymbolBlock}
+     */
     public void setMxSymbolBlock(SymbolBlock symbolBlock) {
         this.symbolBlock = symbolBlock;
     }
 
+    /**
+     * Get the name of the Model.
+     *
+     * @return modelName
+     */
     public String getModelName() {
         return modelName;
     }
 
+    /**
+     * Set the model name for the Model.
+     *
+     * @param modelName for the Model
+     */
     public void setModelName(String modelName) {
         this.modelName = modelName;
     }
 
+    /**
+     * Get data type for the Model.
+     *
+     * @return {@link DataType}
+     */
     public DataType getDataType() {
         return dataType;
     }
 
+    /**
+     * Set data type for the Model.
+     *
+     * @param dataType {@link DataType}
+     */
     public void setDataType(DataType dataType) {
         this.dataType = dataType;
     }
 
+    /**
+     * Get input data of the Model.
+     *
+     * @return {@link PairList} inputData
+     */
     public PairList<String, Shape> getInputData() {
         return inputData;
     }
 
+    /**
+     * Set input data for the Model.
+     *
+     * @param inputData {@link PairList}
+     */
     public void setInputData(PairList<String, Shape> inputData) {
         this.inputData = inputData;
     }
 
+    /**
+     * Get the Artifact Object from artifacts by key.
+     *
+     * @param key for the Artifact Object
+     * @return Artifact {@link Object} instance
+     */
     public Object getArtifact(String key) {
         return artifacts.get(key);
     }
 
+    /**
+     * Set the Artifact Object for artifacts.
+     *
+     * @param key for the Artifact
+     * @param artifact {@link Object}
+     */
     public void setArtifact(String key, Object artifact) {
         artifacts.put(key, artifact);
     }
 
+    /**
+     * Get the property from properties by key.
+     *
+     * @param key {@link String}
+     * @return {@link String} property
+     */
     public String getProperty(String key) {
         return properties.get(key);
     }
 
+    /**
+     * Set the property for the Model.
+     *
+     * @param key for the property
+     * @param property value of the property
+     */
     public void setProperties(String key, String property) {
         this.properties.put(key, property);
     }
 
+    /** {@inheritDoc} */
+    @Override
     public Device getDevice() {
         if (device == null) {
             return super.getDevice();
@@ -359,6 +443,7 @@ public class Model extends MxResource {
         return device;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void close() {
         if (!getClosed()) {

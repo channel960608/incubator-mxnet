@@ -46,6 +46,10 @@ import org.apache.mxnet.util.PairList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * {@code SymbolBlock} is a {@link MxResource}. It is used to load models that were exported directly from
+ * the engine in its native format.
+ */
 public class SymbolBlock extends MxResource {
 
     private static final Logger logger = LoggerFactory.getLogger(SymbolBlock.class);
@@ -120,8 +124,7 @@ public class SymbolBlock extends MxResource {
     }
 
     private void loadSymbol(Path symbolPath) {
-        Symbol symbol = Symbol.loadSymbol(this, symbolPath);
-        this.symbol = symbol;
+        this.symbol = Symbol.loadSymbol(this, symbolPath);
     }
 
     /**
@@ -185,6 +188,11 @@ public class SymbolBlock extends MxResource {
         symbol = newSymbol;
     }
 
+    /**
+     * Returns a {@link PairList} of input names, and shapes.
+     *
+     * @return the {@link PairList} of input names, and shapes
+     */
     public PairList<String, Shape> describeInput() {
         if (inputDescriptions == null) {
             inputDescriptions = new PairList<>();

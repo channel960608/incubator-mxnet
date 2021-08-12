@@ -26,7 +26,7 @@ import java.util.List;
 
 /** An abstraction for a native string array data type ({@code char**}). */
 @SuppressWarnings("checkstyle:EqualsHashCode")
-public class StringArray extends Memory {
+final class StringArray extends Memory {
 
     private static final Charset ENCODING = Native.DEFAULT_CHARSET;
     private static final ObjectPool<StringArray> POOL = new ObjectPool<>(null, null);

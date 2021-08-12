@@ -31,6 +31,14 @@ import org.apache.mxnet.engine.MxResource;
 import org.apache.mxnet.ndarray.types.Shape;
 import org.apache.mxnet.util.NDArrayUtils;
 
+/**
+ * An {@code NDList} represents a sequence of {@link NDArray}s with names.
+ *
+ * <p>Each {@link NDArray} in this list can optionally have a name. You can use the name to look up
+ * an NDArray in the NDList.
+ *
+ * @see NDArray
+ */
 public class NDList extends ArrayList<NDArray> implements AutoCloseable {
     private static final long serialVersionUID = 1L;
 

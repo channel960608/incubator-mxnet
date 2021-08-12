@@ -41,10 +41,15 @@ public class FunctionInfo {
         this.arguments = arguments;
     }
 
+    /**
+     * Returns the name of the operator.
+     *
+     * @return the name of the operator
+     */
     public String getFunctionName() {
         return name;
     }
-    // TODO : complete other methods
+
     /**
      * Calls an operator with the given arguments.
      *
@@ -63,6 +68,7 @@ public class FunctionInfo {
     /**
      * Calls an operator with the given arguments.
      *
+     * @param parent {@link MxResource} for the current instance
      * @param src the input NDArray(s) to the operator
      * @param params the non-NDArray arguments to the operator. Should be a {@code PairList<String,
      *     String>}

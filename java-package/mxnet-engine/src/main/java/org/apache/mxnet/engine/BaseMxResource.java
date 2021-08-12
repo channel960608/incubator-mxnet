@@ -30,7 +30,7 @@ public final class BaseMxResource extends MxResource {
 
     private static final Logger logger = LoggerFactory.getLogger(BaseMxResource.class);
 
-    private static BaseMxResource SYSTEM_MX_RESOURCE;
+    private static BaseMxResource systemMxResource;
 
     protected BaseMxResource() {
         super();
@@ -43,21 +43,28 @@ public final class BaseMxResource extends MxResource {
         Runtime.getRuntime().addShutdownHook(new Thread(JnaUtils::waitAll)); // NOPMD
     }
 
+    /**
+     * Getter method for the singleton {@code systemMxResource} instance.
+     *
+     * @return The top-leve {@link BaseMxResource} instance.
+     */
     public static BaseMxResource getSystemMxResource() {
-        if (SYSTEM_MX_RESOURCE == null) {
-            SYSTEM_MX_RESOURCE = new BaseMxResource();
+        if (systemMxResource == null) {
+            systemMxResource = new BaseMxResource();
         }
-        return SYSTEM_MX_RESOURCE;
+        return systemMxResource;
     }
 
-    //    public static MxResource newSubMxResource() {
-    //        return new MxResource(getSystemMxResource());
-    //    }
-
+    /**
+     * Gets the boolean that indicates whether this resource has been released.
+     *
+     * @return whether this resource has been released
+     */
     public boolean isReleased() {
         return handle.get() == null;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void close() {
         if (!getClosed()) {

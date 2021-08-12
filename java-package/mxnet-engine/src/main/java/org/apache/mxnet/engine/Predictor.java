@@ -82,13 +82,20 @@ public class Predictor<I, O> extends MxResource {
         return processOutPut(ndLists);
     }
 
+    /**
+     * Predicts an Item for inference.
+     *
+     * @param input input data
+     * @return O the output object defined by the user
+     * @throws TranslateException if an error occurs during prediction
+     */
     public O predict(I input) {
         return predict(Collections.singletonList(input)).get(0);
     }
 
     private NDList forward(NDList ndList) {
         logger.trace("Predictor input data: {}", ndList);
-        return model.getMxSymbolBlock().forward(ndList);
+        return model.getSymbolBlock().forward(ndList);
     }
 
     // TODO: add batch predict

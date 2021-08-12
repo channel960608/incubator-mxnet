@@ -64,11 +64,11 @@ sourceSets {
     }
 }
 
-checkstyle.ignoreFailures(true)
+//checkstyle.ignoreFailures(true)
 checkstyleMain.source = 'src/main/java'
-pmd.ignoreFailures(true)
+//pmd.ignoreFailures(true)
 pmdMain.source = 'src/main/java'
-spotbugs.ignoreFailures = true
+//spotbugs.ignoreFailures = true
 
 task jnarator(dependsOn: ":jnarator:jar") {
     outputs.dir "${project.buildDir}/generated-src"

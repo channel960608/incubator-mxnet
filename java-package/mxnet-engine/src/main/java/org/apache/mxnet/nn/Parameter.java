@@ -152,6 +152,7 @@ public class Parameter extends MxResource {
      *
      * @param parent the parent {@link MxResource} to manage this instance
      * @param dataType the datatype of the {@code Parameter}
+     * @param device the device of {@link NDArray} in the {@code Parameter}
      */
     public void initialize(MxResource parent, DataType dataType, Device device) {
         Objects.requireNonNull(shape, "No parameter shape has been set");
