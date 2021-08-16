@@ -99,7 +99,7 @@ public class Symbol extends MxResource {
             if (pointer != null) {
                 JnaUtils.freeSymbol(pointer);
             }
-            setClosed();
+            setClosed(true);
             logger.debug(String.format("Finish to free Symbol instance: %S", this.toJsonString()));
         }
     }

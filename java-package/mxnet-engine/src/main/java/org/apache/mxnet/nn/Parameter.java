@@ -187,12 +187,9 @@ public class Parameter extends MxResource {
      *
      * @param parent the parent {@link MxResource} to manage this instance
      * @param dis the InputStream
-     * @throws IOException if failed to read
-     * @throws MalformedModelException Exception thrown when model is not in expected format
-     *     (parameters).
+     * @throws IOException if failed to read (parameters).
      */
-    public void load(MxResource parent, DataInputStream dis)
-            throws IOException, MalformedModelException {
+    public void load(MxResource parent, DataInputStream dis) throws IOException {
         char magic = dis.readChar();
         if (magic == 'N') {
             return;
@@ -227,7 +224,7 @@ public class Parameter extends MxResource {
                 array.close();
                 array = null;
             }
-            setClosed();
+            setClosed(true);
             logger.debug(String.format("Start to free Symbol instance: %S", this.getUid()));
         }
     }

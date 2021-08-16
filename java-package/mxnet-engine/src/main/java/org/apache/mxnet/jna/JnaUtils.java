@@ -173,7 +173,7 @@ public final class JnaUtils {
     }
 
     public static void freeSymbol(Pointer symbol) {
-        checkCall(LIB.NNSymbolFree(symbol));
+        checkCall(LIB.MXSymbolFree(symbol));
     }
 
     public static String[] listSymbolArguments(Pointer symbol) {
@@ -526,10 +526,7 @@ public final class JnaUtils {
         PointerByReference ref = REFS.acquire();
         for (String opName : opNames) {
             checkCall(LIB.NNGetOpHandle(opName, ref));
-
             String functionName = getOpNamePrefix(opName);
-
-            // System.out.println("Name: " + opName + "/" + functionName);
             map.put(functionName, getFunctionByName(opName, functionName, ref.getValue()));
             ref.setValue(null);
         }

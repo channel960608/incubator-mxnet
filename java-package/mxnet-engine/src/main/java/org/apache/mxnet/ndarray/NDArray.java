@@ -19,6 +19,10 @@ package org.apache.mxnet.ndarray;
 
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.DoubleBuffer;
@@ -1115,6 +1119,10 @@ public class NDArray extends MxResource {
 
     NDArray get(NDIndex index) {
         return getNDArrayInternal().getIndexer().get(this, index);
+    }
+
+    NDArray get(long... indices) {
+        return get(new NDIndex(indices));
     }
 
     NDArray getScalar(long... indices) {
@@ -3026,7 +3034,7 @@ public class NDArray extends MxResource {
             if (this.getHandle() != null) {
                 JnaUtils.freeNdArray(this.getHandle());
             }
-            setClosed();
+            setClosed(true);
             logger.debug(String.format("Finish to free NDArray instance: %S", this.getUid()));
         }
     }
@@ -3264,6 +3272,33 @@ public class NDArray extends MxResource {
     }
 
     /**
+     * Decodes {@link NDArray} through byte array.
+     *
+     * @param parent the parent {@link MxResource} to create the {@link NDArray}
+     * @param bytes byte array to load from
+     * @return {@link NDArray}
+     */
+    static NDArray decode(MxResource parent, byte[] bytes) {
+        try (DataInputStream dis = new DataInputStream(new ByteArrayInputStream(bytes))) {
+            return NDSerializer.decode(parent, dis);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("NDArray decoding failed", e);
+        }
+    }
+
+    /**
+     * Decodes {@link NDArray} through {@link DataInputStream}.
+     *
+     * @param parent the parent {@link MxResource} to create the {@link NDArray}
+     * @param is input stream data to load from
+     * @return {@link NDArray}
+     * @throws IOException data is not readable
+     */
+    public static NDArray decode(MxResource parent, InputStream is) throws IOException {
+        return NDSerializer.decode(parent, is);
+    }
+
+    /**
      * Converts this {@code NDArray} to a Number array based on its {@link DataType}.
      *
      * @return a Number array
@@ -3415,5 +3450,27 @@ public class NDArray extends MxResource {
             buf[i] = bb.get() & 0xff;
         }
         return buf;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String toString() {
+        if (getClosed()) {
+            return "This array is already closed";
+        }
+        return toDebugString(MAX_SIZE, MAX_DEPTH, MAX_ROWS, MAX_COLUMNS);
+    }
+
+    /**
+     * Runs the debug string representation of this {@code NDArray}.
+     *
+     * @param maxSize the maximum elements to print out
+     * @param maxDepth the maximum depth to print out
+     * @param maxRows the maximum rows to print out
+     * @param maxColumns the maximum columns to print out
+     * @return the debug string representation of this {@code NDArray}
+     */
+    String toDebugString(int maxSize, int maxDepth, int maxRows, int maxColumns) {
+        return NDFormat.format(this, maxSize, maxDepth, maxRows, maxColumns);
     }
 }

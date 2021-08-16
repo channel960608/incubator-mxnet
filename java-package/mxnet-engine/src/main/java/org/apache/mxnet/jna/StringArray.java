@@ -59,7 +59,7 @@ final class StringArray extends Memory {
                 natives.add(ns);
                 p = ns.getPointer();
             }
-            setPointer(Native.POINTER_SIZE * strings.length, null);
+            setPointer(Native.POINTER_SIZE * i, p);
         }
         setPointer(Native.POINTER_SIZE * strings.length, null);
     }

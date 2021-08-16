@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import org.apache.mxnet.exception.MalformedModelException;
 import org.apache.mxnet.jna.JnaUtils;
 import org.apache.mxnet.ndarray.NDArray;
 import org.apache.mxnet.ndarray.NDList;
@@ -54,8 +53,6 @@ import org.slf4j.LoggerFactory;
 public class Model extends MxResource {
 
     private static final Logger logger = LoggerFactory.getLogger(Model.class);
-    private static final int MODEL_VERSION = 1;
-
     protected Path modelDir;
     protected SymbolBlock symbolBlock;
     protected String modelName;
@@ -83,19 +80,7 @@ public class Model extends MxResource {
      */
     public Predictor<NDList, NDList> newPredictor() {
         Translator<NDList, NDList> noOpTranslator = new NoOpTranslator();
-        return newPredictor(noOpTranslator, false);
-    }
-
-    /**
-     * Create a default {@link Predictor} instance, with {@link NoOpTranslator} as default
-     * translator.
-     *
-     * @param copy whether to copy the parameters to the parameter store
-     * @return {@link Predictor}
-     */
-    public Predictor<NDList, NDList> newPredictor(boolean copy) {
-        Translator<NDList, NDList> noOpTranslator = new NoOpTranslator();
-        return newPredictor(noOpTranslator, copy);
+        return newPredictor(noOpTranslator);
     }
 
     /**
@@ -105,11 +90,10 @@ public class Model extends MxResource {
      *     to get inferred
      * @param <I> the input type
      * @param <O> the output type
-     * @param copy whether to copy the parameters to the parameter store
      * @return {@link Predictor}
      */
-    public <I, O> Predictor<I, O> newPredictor(Translator<I, O> translator, boolean copy) {
-        return new Predictor<>(this, translator, copy);
+    public <I, O> Predictor<I, O> newPredictor(Translator<I, O> translator) {
+        return new Predictor<>(this, translator);
     }
 
     /**
@@ -196,9 +180,8 @@ public class Model extends MxResource {
      *
      * @param modelPath the directory or file path of the model location
      * @throws IOException when IO operation fails in loading a resource
-     * @throws MalformedModelException if model file is corrupted
      */
-    public void load(Path modelPath) throws IOException, MalformedModelException {
+    public void load(Path modelPath) throws IOException {
         load(modelPath, null, null);
     }
 
@@ -219,10 +202,8 @@ public class Model extends MxResource {
      * @param prefix the model file name or path prefix
      * @param options load model options, see documentation for the specific engine
      * @throws IOException Exception for file loading
-     * @throws MalformedModelException Exception for unexpected Model parameters
      */
-    public void load(Path modelPath, String prefix, Map<String, ?> options)
-            throws IOException, MalformedModelException {
+    public void load(Path modelPath, String prefix, Map<String, ?> options) throws IOException {
         modelDir = modelPath.toAbsolutePath();
         if (prefix == null) {
             prefix = modelName;
@@ -250,7 +231,7 @@ public class Model extends MxResource {
             // TODO: change default name "data" to model-specific one
             setMxSymbolBlock(SymbolBlock.createMxSymbolBlock(this, symbolFile));
         }
-        loadParameters(paramFile, options);
+        loadParameters(paramFile);
         // TODO: Check if Symbol has all names that params file have
         if (options != null && options.containsKey("MxOptimizeFor")) {
             String optimization = (String) options.get("MxOptimizeFor");
@@ -278,8 +259,8 @@ public class Model extends MxResource {
         return Utils.getCurrentEpoch(getModelDir(), prefix);
     }
 
-    private void loadParameters(Path paramFile, Map<String, ?> options)
-            throws MalformedModelException {
+    @SuppressWarnings("PMD.UseConcurrentHashMap")
+    private void loadParameters(Path paramFile) {
 
         NDList paramNDlist = JnaUtils.loadNdArray(this, paramFile, getDevice());
 
@@ -354,7 +335,7 @@ public class Model extends MxResource {
      *
      * @param modelName for the Model
      */
-    public void setModelName(String modelName) {
+    public final void setModelName(String modelName) {
         this.modelName = modelName;
     }
 
@@ -372,7 +353,7 @@ public class Model extends MxResource {
      *
      * @param dataType {@link DataType}
      */
-    public void setDataType(DataType dataType) {
+    public final void setDataType(DataType dataType) {
         this.dataType = dataType;
     }
 
@@ -454,7 +435,7 @@ public class Model extends MxResource {
             this.symbolBlock = null;
             this.artifacts = null;
             this.properties = null;
-            setClosed();
+            setClosed(true);
             logger.debug(String.format("Finish to free Model instance: %S", this.getModelName()));
         }
     }

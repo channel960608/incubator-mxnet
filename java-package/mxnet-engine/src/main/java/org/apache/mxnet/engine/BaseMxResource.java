@@ -48,20 +48,11 @@ public final class BaseMxResource extends MxResource {
      *
      * @return The top-leve {@link BaseMxResource} instance.
      */
-    public static BaseMxResource getSystemMxResource() {
+    public static synchronized BaseMxResource getSystemMxResource() {
         if (systemMxResource == null) {
             systemMxResource = new BaseMxResource();
         }
         return systemMxResource;
-    }
-
-    /**
-     * Gets the boolean that indicates whether this resource has been released.
-     *
-     * @return whether this resource has been released
-     */
-    public boolean isReleased() {
-        return handle.get() == null;
     }
 
     /** {@inheritDoc} */
@@ -72,7 +63,7 @@ public final class BaseMxResource extends MxResource {
             // only clean sub resources
             JnaUtils.waitAll();
             super.freeSubResources();
-            setClosed();
+            setClosed(true);
             logger.debug(
                     String.format("Finish to free BaseMxResource instance: %S", this.getUid()));
         }

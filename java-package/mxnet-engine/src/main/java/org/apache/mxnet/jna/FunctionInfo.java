@@ -18,6 +18,7 @@
 package org.apache.mxnet.jna;
 
 import com.sun.jna.Pointer;
+import java.util.List;
 import org.apache.mxnet.engine.Device;
 import org.apache.mxnet.engine.MxResource;
 import org.apache.mxnet.ndarray.NDArray;
@@ -50,6 +51,23 @@ public class FunctionInfo {
         return name;
     }
 
+    /**
+     * Returns the names of the params to the operator.
+     *
+     * @return the names of the params to the operator
+     */
+    public List<String> getArgumentNames() {
+        return arguments.keys();
+    }
+
+    /**
+     * Returns the types of the operator arguments.
+     *
+     * @return the types of the operator arguments
+     */
+    public List<String> getArgumentTypes() {
+        return arguments.values();
+    }
     /**
      * Calls an operator with the given arguments.
      *

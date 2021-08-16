@@ -154,13 +154,14 @@ public final class LibUtils {
 
     private static Enumeration<URL> getUrls() {
         try {
-            Enumeration<URL> urls =
-                    Thread.currentThread()
-                            .getContextClassLoader()
-                            .getResources(MXNET_PROPERTIES_FILE_PATH);
-            return urls;
+            return Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResources(MXNET_PROPERTIES_FILE_PATH);
         } catch (IOException e) {
-            logger.warn("IO Exception occurs when try to find the file %s", MXNET_LIBRARY_PATH, e);
+            logger.warn(
+                    String.format(
+                            "IO Exception occurs when try to find the file %s", MXNET_LIBRARY_PATH),
+                    e);
             return null;
         }
     }
@@ -328,9 +329,8 @@ public final class LibUtils {
         }
     }
 
-    // TODO
     private static boolean notSupported(Platform platform) {
-        // to be loaded from properties
+        // TODO check unSupported platform for MXNet 2.0
         return false;
     }
 }

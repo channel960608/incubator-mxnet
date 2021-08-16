@@ -32,8 +32,6 @@ public class MxResource extends NativeResource<Pointer> {
 
     private static final Logger logger = LoggerFactory.getLogger(MxResource.class);
 
-    public static final String EMPTY_UID = "EMPTY_UID";
-
     private static boolean closed;
 
     protected Device device;
@@ -49,7 +47,7 @@ public class MxResource extends NativeResource<Pointer> {
 
     protected MxResource(MxResource parent, String uid) {
         super(uid);
-        closed = false;
+        setClosed(false);
         setParent(parent);
         getParent().addSubResource(this);
     }
@@ -111,7 +109,7 @@ public class MxResource extends NativeResource<Pointer> {
         return subResources;
     }
 
-    protected void setParent(MxResource parent) {
+    protected final void setParent(MxResource parent) {
         this.parent = parent;
     }
 
@@ -146,9 +144,13 @@ public class MxResource extends NativeResource<Pointer> {
         return Device.defaultIfNull(curDevice);
     }
 
-    /** Set the MxResource instance as closed. */
-    public void setClosed() {
-        this.closed = true;
+    /**
+     * Sets closed for MxResource instance.
+     *
+     * @param isClosed whether this {@link MxResource} get closed
+     */
+    public final void setClosed(boolean isClosed) {
+        this.closed = isClosed;
     }
 
     /**
@@ -164,6 +166,6 @@ public class MxResource extends NativeResource<Pointer> {
     @Override
     public void close() {
         freeSubResources();
-        setClosed();
+        setClosed(true);
     }
 }
