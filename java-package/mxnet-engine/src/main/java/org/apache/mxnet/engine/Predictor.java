@@ -48,8 +48,6 @@ public class Predictor<I, O> extends MxResource {
 
     private static final Logger logger = LoggerFactory.getLogger(Predictor.class);
     private Translator<I, O> translator;
-    private long timestamp;
-    private boolean prepared;
     private Model model;
 
     /**
